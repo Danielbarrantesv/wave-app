@@ -1,0 +1,205 @@
+package com.mp3tify.ui.screens.lyrics
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.MusicOff
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import com.mp3tify.lyrics.LrcLibClient
+import com.mp3tify.lyrics.LrcParser
+import com.mp3tify.lyrics.ParsedLyrics
+import com.mp3tify.playback.PlaybackController
+import com.mp3tify.ui.t
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
+/**
+ * Lyrics screen — AUTO-SEARCH ON ENTRY. There are NO buttons at all:
+ * the cache is checked first, otherwise lrclib.net is queried automatically.
+ */
+@Composable
+fun LyricsScreen(onBack: () -> Unit) {
+    val context = LocalContext.current
+    val state by PlaybackController.state.collectAsState()
+    val current = state.playlist.getOrNull(state.currentWindow)
+
+    var loading by remember { mutableStateOf(false) }
+    var notAvailable by remember { mutableStateOf(false) }
+    var parsed by remember { mutableStateOf<ParsedLyrics?>(null) }
+
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(current?.id) {
+        val song = current
+        parsed = null
+        notAvailable = false
+        if (song == null) {
+            return@LaunchedEffect
+        }
+        val artist = song.artist ?: ""
+        val track = song.title ?: song.fileName
+        if (track.isBlank()) {
+            notAvailable = true
+            return@LaunchedEffect
+        }
+        try {
+            if (LrcLibClient.isCached(context, artist, track)) {
+                val raw = LrcLibClient.getLyrics(
+                    context, artist, track, song.album, song.durationMs / 1000
+                )
+                val p = raw?.let { LrcParser.parse(it) }
+                if (p != null) parsed = p else notAvailable = true
+            } else {
+                loading = true
+                val raw = withContext(Dispatchers.IO) {
+                    LrcLibClient.getLyrics(
+                        context, artist, track, song.album, song.durationMs / 1000
+                    )
+                }
+                loading = false
+                val p = raw?.let { LrcParser.parse(it) }
+                if (p != null) parsed = p else notAvailable = true
+            }
+        } catch (e: Exception) {
+            loading = false
+            notAvailable = true
+        }
+    }
+
+    val lyrics = parsed
+    val positionMs = state.positionMs
+    val activeIndex = if (lyrics != null) LrcParser.activeLineIndex(lyrics, positionMs) else -1
+
+    // Auto-scroll so the active line stays visible (activeIndex - 3).
+    LaunchedEffect(activeIndex) {
+        if (lyrics != null && activeIndex > 3) {
+            try {
+                listState.animateScrollToItem((activeIndex - 3).coerceAtLeast(0))
+            } catch (e: Exception) {
+            }
+        }
+    }
+
+    Column(Modifier.fillMaxSize()) {
+        // Top bar: back + title only.
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.Filled.ArrowBack, contentDescription = t("back"))
+            }
+            Spacer(Modifier.width(8.dp))
+            Text(
+                t("lyrics"),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        Box(Modifier.fillMaxSize().padding(bottom = 24.dp)) {
+            when {
+                loading -> {
+                    Column(
+                        Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            t("searching_lyrics"),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                notAvailable -> {
+                    Column(
+                        Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            Icons.Filled.MusicOff,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        Text(
+                            t("lyrics_not_available"),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                lyrics != null -> {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        itemsIndexed(lyrics.lines) { i, line ->
+                            val active = i == activeIndex
+                            Text(
+                                line.text.ifBlank { " " },
+                                style = if (active) {
+                                    MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                                } else {
+                                    MaterialTheme.typography.bodyLarge
+                                },
+                                color = if (active) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 10.dp)
+                            )
+                        }
+                    }
+                }
+                else -> {
+                    // Initial state (no song yet).
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                }
+            }
+        }
+    }
+}

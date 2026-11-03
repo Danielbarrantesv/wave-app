@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Wave</string>
+    <string name="notification_channel_name">Reproducción</string>
+    <string name="notification_channel_desc">Controles de reproducción de Wave</string>
+</resources>
