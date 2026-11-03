@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  CRITICAL FIX (Problema 3 — auto-backup al desinstalar):
+  fullBackupContent le dice a Android qué respaldar automaticamente a Google Drive
+  cuando android:allowBackup="true". Sin esto, Android usa las reglas por defecto
+  (que incluyen la DB Room y SharedPreferences, pero es mejor ser explicito).
+
+  Al reinstalar la app, Android restaura automaticamente:
+   - La DB Room (songs, playlists, playlist_songs) → las canciones y listas
+     aparecen como estaban antes de desinstalar.
+   - SharedPreferences (wave_uri_backup con los tree URIs, mp3tify_meta, etc.)
+     → BackupUriManager.restoreTreeUris() re-solicita los URI permissions.
+   - Preferences DataStore (keepScreenOn, keepAppOpen, darkTheme, accentColor, language)
+     → los ajustes del usuario se mantienen.
+
+  Lo que NO se puede respaldar (caduca al desinstalar):
+   - Los persistable URI permissions content:// → por eso necesitamos
+     BackupUriManager: guarda los URIs en SharedPreferences (que SI se respalda)
+     y los re-solicita al reinstalar.
+   - El cache de portadas (cacheDir/art/) → se regenera al leer las canciones.
+-->
+<full-backup-content>
+    <!-- Incluir la base de datos Room (songs, playlists, playlist_songs) -->
+    <include domain="database" path="." />
+    <!-- Incluir SharedPreferences (wave_uri_backup, mp3tify_meta, etc.) -->
+    <include domain="sharedpref" path="." />
+    <!-- Incluir el cache de portadas (art/) y lyrics (lyrics/) — se regeneran -->
+    <include domain="cache" path="art/" />
+    <include domain="cache" path="lyrics/" />
+    <!-- Excluir el cache de imagenes de Coil (se regenera solo) -->
+    <exclude domain="cache" path="image_cache/" />
+</full-backup-content>

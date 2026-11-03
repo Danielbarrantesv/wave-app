@@ -38,6 +38,16 @@ class MP3tifyApp : Application(), ImageLoaderFactory {
         } catch (e: Exception) {
             e.printStackTrace()
         }
+        // CRITICAL FIX (Problema 3 — auto-backup de URIs): restaurar los tree URIs
+        // de las carpetas de música que el usuario seleccionó. Tras una reinstalación,
+        // android:allowBackup restaura SharedPreferences (donde guardamos los URIs)
+        // desde Google Drive. Aquí re-solicitamos los persistable URI permissions
+        // para que las carpetas vuelvan a ser accesibles y las canciones reproducibles.
+        try {
+            com.mp3tify.backup.BackupUriManager.restoreTreeUris(this)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     private fun oneShotDbReset() {

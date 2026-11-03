@@ -111,14 +111,8 @@ fun PlaylistScreen(
         ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
         if (uri != null) {
-            try {
-                context.contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PREFIX_URI_PERMISSION
-                )
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
+            // Guardar el tree URI en SharedPreferences para respaldo (BackupUriManager).
+            com.mp3tify.backup.BackupUriManager.saveTreeUri(context, uri)
             vm.setFolder(uri.toString())
             vm.importFolder(uri.toString()) { result -> onImportDone(result) }
         }
