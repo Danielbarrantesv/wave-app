@@ -92,8 +92,18 @@ object BackupManager {
             }
         }
 
-    /** Restores songs + playlists, deduping against what already exists. */
-    suspend fun restore(context: Context, backup: BackupV2): Boolean = withContext(Dispatchers.IO) {
+    /**
+     * Restores songs + playlists, deduping against what already exists.
+     *
+     * CRITICAL FIX (Bug restore a medias): ahora acepta un callback [onProgress]
+     * que recibe el porcentaje (0-100) para que la UI muestre una barra de
+     * progreso y bloquee la salida hasta que termine.
+     */
+    suspend fun restore(
+        context: Context,
+        backup: BackupV2,
+        onProgress: (Int) -> Unit = {}
+    ): Boolean = withContext(Dispatchers.IO) {
         try {
             val repo = Repository.get(context)
             val existing = repo.allSongs()
@@ -110,8 +120,9 @@ object BackupManager {
             val artDir = java.io.File(context.cacheDir, "art")
             if (!artDir.exists()) artDir.mkdirs()
 
-            // Songs
-            backup.songs.forEach { s ->
+            // Songs (70% del progreso)
+            val totalSongs = backup.songs.size.coerceAtLeast(1)
+            backup.songs.forEachIndexed { idx, s ->
                 val known = existingPaths.contains(s.filePath) ||
                     (s.fingerprint != null && existingFps.contains(s.fingerprint))
                 if (!known) {
@@ -128,11 +139,14 @@ object BackupManager {
                         ?: existing.find { it.fingerprint != null && it.fingerprint == s.fingerprint }
                     if (match != null) idMap[s.id] = match.id
                 }
+                // Reportar progreso: 0-70% según avance de canciones.
+                onProgress(((idx + 1) * 70) / totalSongs)
             }
 
-            // Playlists (never overwrite; rename on collision)
+            // Playlists (30% del progreso) — never overwrite; rename on collision
             val existingNames = repo.allPlaylists().map { it.name }.toHashSet()
-            backup.playlists.forEach { pl ->
+            val totalPlaylists = backup.playlists.size.coerceAtLeast(1)
+            backup.playlists.forEachIndexed { idx, pl ->
                 val name = if (existingNames.contains(pl.name)) "${pl.name} (restaurada)" else pl.name
                 existingNames.add(name)
                 val newPlId = repo.createPlaylist(name, pl.description, pl.folderUri)
@@ -143,6 +157,8 @@ object BackupManager {
                         .mapNotNull { idMap[it.songId] }
                     if (songIds.isNotEmpty()) repo.addSongsToPlaylist(newPlId, songIds)
                 }
+                // Reportar progreso: 70-100% según avance de playlists.
+                onProgress(70 + (((idx + 1) * 30) / totalPlaylists))
             }
 
             // Sync favorites into the protected "Favoritos" playlist if present.
