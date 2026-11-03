@@ -81,4 +81,10 @@ interface SongDao {
 
     @Query("UPDATE songs SET title = :title, artist = :artist, album = :album WHERE id = :id")
     suspend fun updateInfo(id: Long, title: String?, artist: String?, album: String?)
+
+    /** CRITICAL FIX (Bug restore tras desinstalar): actualiza el filePath y artUri
+     * de una canción cuando se re-selecciona la carpeta de música tras una
+     * reinstalación (los URIs content:// originales caducaron). */
+    @Query("UPDATE songs SET filePath = :filePath, artUri = :artUri WHERE id = :id")
+    suspend fun updateSongPaths(id: Long, filePath: String, artUri: String?)
 }

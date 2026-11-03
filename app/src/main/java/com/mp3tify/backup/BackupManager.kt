@@ -1,6 +1,7 @@
 package com.mp3tify.backup
 
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
 import com.google.gson.Gson
@@ -91,6 +92,135 @@ object BackupManager {
                 null
             }
         }
+
+    /**
+     * CRITICAL FIX (Bug restore tras desinstalar): verifica si las canciones
+     * restauradas tienen filePaths accesibles. Tras una reinstalación, los URIs
+     * content:// del backup caducan (permissions perdidos) → las canciones no
+     * suenan. Retorna true si ALGUNA canción no es accesible (necesita re-selección).
+     */
+    suspend fun needsFolderAccess(context: Context): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val repo = Repository.get(context)
+            val songs = repo.allSongs()
+            if (songs.isEmpty()) return@withContext false
+            // Verificar las primeras 5 canciones (rápido, no revisa todas).
+            songs.take(5).any { song ->
+                try {
+                    context.contentResolver.openInputStream(android.net.Uri.parse(song.filePath))?.use { true } ?: false
+                } catch (e: Exception) { false } == false
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    /**
+     * CRITICAL FIX (Bug restore tras desinstalar — canciones no suenan):
+     * Tras desinstalar la app, los persistable URI permissions se pierden y
+     * los filePath content:// del backup ya no son accesibles. El usuario debe
+     * volver a seleccionar la carpeta de música. Este método toma el tree URI
+     * nuevo, recorre las canciones de la DB, y si una canción tiene un filePath
+     * inaccesible, busca un archivo con el mismo fileName en el nuevo tree y
+     * actualiza el filePath (y re-extrae la portada).
+     *
+     * Retorna un par (remapped, total) donde remapped = cuántas canciones se
+     * pudieron re-mapear y total = cuántas se intentaron.
+     */
+    suspend fun remapFilePaths(
+        context: Context,
+        treeUriString: String,
+        onProgress: (Int) -> Unit = {}
+    ): Pair<Int, Int> = withContext(Dispatchers.IO) {
+        var remapped = 0
+        var total = 0
+        try {
+            val repo = Repository.get(context)
+            val songs = repo.allSongs()
+            total = songs.size
+            if (total == 0) return@withContext Pair(0, 0)
+
+            // Tomar el persistable permission del tree URI.
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    android.net.Uri.parse(treeUriString),
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PREFIX_URI_PERMISSION
+                )
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            // Guardar el tree URI en BackupUriManager para futuros restores.
+            com.mp3tify.backup.BackupUriManager.saveTreeUri(context, android.net.Uri.parse(treeUriString))
+
+            // Recorrer el tree y construir un mapa fileName → uri (para búsqueda rápida).
+            val tree = DocumentFile.fromTreeUri(context, android.net.Uri.parse(treeUriString))
+            if (tree == null) return@withContext Pair(0, total)
+            val files = mutableListOf<DocumentFile>()
+            walkTreeForRemap(tree, files, 0)
+            val nameToUri = files.associate { (it.name ?: "") to it.uri.toString() }
+
+            val artDir = java.io.File(context.cacheDir, "art")
+            if (!artDir.exists()) artDir.mkdirs()
+
+            songs.forEachIndexed { idx, song ->
+                // Verificar si el filePath actual es accesible.
+                val filePath = song.filePath
+                val isAccessible = try {
+                    context.contentResolver.openInputStream(android.net.Uri.parse(filePath))?.use { true } ?: false
+                } catch (e: Exception) { false }
+                if (!isAccessible) {
+                    // Buscar el archivo por fileName en el tree nuevo.
+                    val fileName = song.fileName
+                    val newUri = nameToUri[fileName]
+                    if (newUri != null) {
+                        // Actualizar el filePath de la canción en la DB.
+                        try {
+                            // Re-extraer la portada del nuevo filePath.
+                            val retriever = android.media.MediaMetadataRetriever()
+                            var newArtUri: String? = song.artUri
+                            try {
+                                retriever.setDataSource(context, android.net.Uri.parse(newUri))
+                                val bytes = retriever.embeddedPicture
+                                if (bytes != null && bytes.isNotEmpty()) {
+                                    val hash = pathHash(newUri)
+                                    val artFile = java.io.File(artDir, "art_$hash.jpg")
+                                    if (!artFile.exists()) {
+                                        java.io.FileOutputStream(artFile).use { it.write(bytes) }
+                                    }
+                                    newArtUri = artFile.absolutePath
+                                }
+                            } finally { try { retriever.release() } catch (_: Exception) {} }
+                            // Actualizar la canción en la DB con el nuevo filePath y artUri.
+                            repo.updateSongPaths(song.id, newUri, newArtUri)
+                            remapped++
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    }
+                }
+                onProgress(((idx + 1) * 100) / total)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        Pair(remapped, total)
+    }
+
+    private fun walkTreeForRemap(root: DocumentFile, out: MutableList<DocumentFile>, depth: Int) {
+        if (depth > 8) return
+        try {
+            for (child in root.listFiles()) {
+                if (child.isDirectory) {
+                    walkTreeForRemap(child, out, depth + 1)
+                } else {
+                    out.add(child)
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
 
     /**
      * Restores songs + playlists, deduping against what already exists.
