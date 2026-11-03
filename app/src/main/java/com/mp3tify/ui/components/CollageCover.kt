@@ -86,10 +86,15 @@ private fun CollageTile(song: Song?, modifier: Modifier = Modifier) {
 
     LaunchedEffect(song?.id) {
         val s = song ?: return@LaunchedEffect
+        // CRITICAL FIX (Bug portadas restauradas): prefer artUri (JPG cache file)
+        // and pass filePath as fallback. If the JPG cache was wiped on uninstall,
+        // AlbumArtCache.decode falls back to extracting the ID3 picture from the
+        // audio content:// URI via filePath.
         val path = s.artUri?.takeIf { it.isNotBlank() } ?: s.filePath
+        val fallback = if (path != s.filePath) s.filePath else null
         if (path.isNotBlank()) {
             bitmap = withContext(Dispatchers.IO) {
-                try { AlbumArtCache.decode(context, path, 256) } catch (e: Exception) { null }
+                try { AlbumArtCache.decode(context, path, 256, fallback) } catch (e: Exception) { null }
             }
         }
     }

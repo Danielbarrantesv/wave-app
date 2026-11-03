@@ -101,12 +101,23 @@ object BackupManager {
             val existingFps = existing.mapNotNull { it.fingerprint }.toHashSet()
             val idMap = mutableMapOf<Long, Long>()
 
+            // CRITICAL FIX (Bug portadas restauradas): al restaurar canciones del
+            // backup, el artUri del JSON apunta a un JPG en cacheDir/art/ que
+            // fue borrado al desinstalar. Aquí re-extraemos la portada embebida
+            // del archivo de audio (vía filePath, accesible gracias a
+            // BackupUriManager.restoreTreeUris) y regeneramos el artUri con un
+            // path válido al cache recién creado.
+            val artDir = java.io.File(context.cacheDir, "art")
+            if (!artDir.exists()) artDir.mkdirs()
+
             // Songs
             backup.songs.forEach { s ->
                 val known = existingPaths.contains(s.filePath) ||
                     (s.fingerprint != null && existingFps.contains(s.fingerprint))
                 if (!known) {
-                    val newId = repo.insertSong(s.copy(id = 0))
+                    // Re-extraer la portada del archivo de audio si está accesible.
+                    val songWithArt = reExtractArt(context, s, artDir)
+                    val newId = repo.insertSong(songWithArt.copy(id = 0))
                     if (newId > 0) {
                         idMap[s.id] = newId
                         existingPaths.add(s.filePath)
@@ -148,6 +159,62 @@ object BackupManager {
         } catch (e: Exception) {
             e.printStackTrace()
             false
+        }
+    }
+
+    /**
+     * CRITICAL FIX (Bug portadas restauradas): re-extrae la portada embebida
+     * del archivo de audio (vía filePath) y la guarda en cacheDir/art/ con un
+     * hash del filePath. Retorna una copia de la Song con el artUri actualizado
+     * apuntando al nuevo JPG cacheado. Si el archivo de audio no es accesible
+     * (URI caducó o no hay permission), retorna la Song original sin cambios.
+     */
+    private suspend fun reExtractArt(
+        context: Context,
+        song: Song,
+        artDir: java.io.File
+    ): Song {
+        return try {
+            val filePath = song.filePath
+            if (filePath.isBlank()) return song
+            // Verificar si el artUri original aún apunta a un archivo existente.
+            val origArt = song.artUri
+            if (origArt != null && !origArt.startsWith("content://") && java.io.File(origArt).exists()) {
+                return song  // El cache de portada aún existe, no hay nada que re-extraer.
+            }
+            // Re-extraer la portada embebida del archivo de audio.
+            val retriever = android.media.MediaMetadataRetriever()
+            val bytes: ByteArray?
+            try {
+                if (filePath.startsWith("content://")) {
+                    retriever.setDataSource(context, android.net.Uri.parse(filePath))
+                } else {
+                    retriever.setDataSource(filePath)
+                }
+                bytes = retriever.embeddedPicture
+            } finally {
+                try { retriever.release() } catch (_: Exception) {}
+            }
+            if (bytes == null || bytes.isEmpty()) return song
+            // Guardar el JPG en cache con un hash del filePath (igual que buildSong).
+            val hash = pathHash(filePath)
+            val artFile = java.io.File(artDir, "art_$hash.jpg")
+            if (!artFile.exists()) {
+                java.io.FileOutputStream(artFile).use { it.write(bytes) }
+            }
+            song.copy(artUri = artFile.absolutePath)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            song  // En caso de error, devolver la song original.
+        }
+    }
+
+    private fun pathHash(key: String): String {
+        return try {
+            val md = java.security.MessageDigest.getInstance("SHA-1")
+            md.digest(key.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+        } catch (e: Exception) {
+            key.hashCode().toUInt().toString()
         }
     }
 }
