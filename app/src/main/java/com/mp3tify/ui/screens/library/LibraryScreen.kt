@@ -377,12 +377,13 @@ fun LibraryScreen(
             }
         }
 
-        // Global "Cargando música…" overlay while importing.
+        // Global "Cargando archivos…" overlay while importing.
+        // Mismo estilo que el de PlaylistScreen: título bold + descripción centrada.
         if (importing) {
             Box(
                 Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.6f)),
+                    .background(Color.Black.copy(alpha = 0.7f)),
                 contentAlignment = Alignment.Center
             ) {
                 Surface(
@@ -390,12 +391,23 @@ fun LibraryScreen(
                     color = MaterialTheme.colorScheme.surface
                 ) {
                     Column(
-                        Modifier.padding(24.dp),
+                        Modifier.padding(32.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.height(12.dp))
-                        Text(t("loading_music"))
+                        Spacer(Modifier.height(16.dp))
+                        Text(
+                            t("loading_files"),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            t("loading_files_desc"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
                     }
                 }
             }

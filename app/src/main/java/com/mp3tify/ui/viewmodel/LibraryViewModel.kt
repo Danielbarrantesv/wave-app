@@ -162,19 +162,42 @@ class LibraryViewModel(
         folderUri: String? = null,
         onCreated: (Long) -> Unit = {}
     ) {
+        // CRITICAL FIX (Bug no muestra loading al crear playlist con carpeta):
+        // si hay folderUri, activar importing.value = true ANTES de lanzar el
+        // import y mantenerlo hasta que termine. Antes, createPlaylist retornaba
+        // inmediatamente y el import corría en background sin que el overlay de
+        // "Cargando archivos..." se mostrara — el usuario no veía feedback.
+        if (!folderUri.isNullOrBlank()) {
+            importing.value = true
+        }
         scope.launch {
             try {
                 val id = repo.createPlaylist(name, null, folderUri)
                 if (id > 0) {
                     if (songIds.isNotEmpty()) repo.addSongsToPlaylist(id, songIds)
                     if (!folderUri.isNullOrBlank()) {
+                        // Importar la carpeta y esperar a que termine antes de
+                        // desactivar importing, así el overlay se mantiene visible.
                         scope.launch(Dispatchers.IO) {
-                            try { repo.importFolderIntoPlaylist(folderUri, id) } catch (e: Exception) { e.printStackTrace() }
+                            try {
+                                repo.importFolderIntoPlaylist(folderUri, id)
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            } finally {
+                                importing.value = false
+                            }
                         }
+                    } else {
+                        importing.value = false
                     }
+                } else {
+                    importing.value = false
                 }
                 onCreated(id)
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                importing.value = false
+            }
         }
     }
 
