@@ -146,16 +146,6 @@ class Repository private constructor(private val context: Context) {
         }
     }
 
-    /** CRITICAL FIX (Bug restore tras desinstalar): actualiza el filePath y artUri
-     * de una canción cuando se re-selecciona la carpeta de música. */
-    suspend fun updateSongPaths(songId: Long, filePath: String, artUri: String?) {
-        try {
-            songDao.updateSongPaths(songId, filePath, artUri)
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
     suspend fun createPlaylist(name: String, description: String? = null, folderUri: String? = null): Long {
         return try {
             val now = System.currentTimeMillis()

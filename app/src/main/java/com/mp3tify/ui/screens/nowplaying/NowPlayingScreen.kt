@@ -221,15 +221,7 @@ fun NowPlayingScreen(
                     }
                     IconButton(onClick = {
                         scope.launch {
-                            try {
-                                // CRITICAL FIX (Bug corazón no desmarca): pass effectiveCurrent
-                                // (DB-observed, with the up-to-date isFavorite) instead of `current`
-                                // (playlist snapshot, stale isFavorite). Before this fix, toggleFavorite
-                                // always received isFavorite=false from the snapshot, so it always
-                                // set the song to favorite (never un-favorited). Now it toggles the
-                                // real current state from the DB.
-                                repo.toggleFavorite(effectiveCurrent ?: current)
-                            } catch (e: Exception) { e.printStackTrace() }
+                            try { repo.toggleFavorite(current) } catch (e: Exception) { e.printStackTrace() }
                         }
                     }) {
                         val isFav = effectiveCurrent?.isFavorite == true

@@ -12,33 +12,13 @@ android {
         applicationId = "com.mp3tify"
         minSdk = 24
         targetSdk = 36
-        versionCode = 7
-        versionName = "2.4.1"
-    }
-
-    // CRITICAL FIX (Problema 2 — actualizar sin desinstalar): firmar TODOS los
-    // builds (debug incluido) con la misma keystore persistente. Antes, cada
-    // build usaba la debug key auto-generada del SDK, que cambia entre máquinas
-    // y entre reciclamientos del sandbox — Android rechazaba la instalación por
-    // conflicto de firma, obligando a desinstalar la versión anterior (perdiendo
-    // datos). Con esta keystore en el repo, todos los APKs se firman idéntico y
-    // `adb install -r` actualiza conservando datos.
-    signingConfigs {
-        create("wave") {
-            storeFile = file("wave-release.keystore")
-            storePassword = "wave2024"
-            keyAlias = "wave"
-            keyPassword = "wave2024"
-        }
+        versionCode = 6
+        versionName = "2.4.0"
     }
 
     buildTypes {
-        debug {
-            signingConfig = signingConfigs.getByName("wave")
-        }
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("wave")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

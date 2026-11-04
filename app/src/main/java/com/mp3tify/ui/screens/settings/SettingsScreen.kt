@@ -28,7 +28,6 @@ import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DriveEta
 import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PhoneAndroid
@@ -36,15 +35,12 @@ import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -61,15 +57,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.mp3tify.backup.BackupManager
 import com.mp3tify.cloud.CloudBackupManager
 import com.mp3tify.data.repository.Repository
 import com.mp3tify.ui.components.ToggleRow
 import com.mp3tify.ui.t
-import com.mp3tify.ui.tf
 import com.mp3tify.ui.theme.AccentColor
 import com.mp3tify.util.AppLanguage
 import com.mp3tify.util.Preferences
@@ -100,18 +93,6 @@ fun SettingsScreen(
     var langMenuOpen by remember { mutableStateOf(false) }
     var showWipeDialog by remember { mutableStateOf(false) }
     var wipeDoneMessage by remember { mutableStateOf<String?>(null) }
-    // CRITICAL FIX (Bug restore a medias): estado del progreso de restauración.
-    // Mientras isRestoring=true, un overlay de pantalla completa bloquea la UI
-    // para que el usuario no pueda salir de Settings hasta que termine.
-    var isRestoring by remember { mutableStateOf(false) }
-    var restoreProgress by remember { mutableStateOf(0) }
-    // CRITICAL FIX (Bug restore tras desinstalar): tras un restore, si las
-    // canciones no son accesibles (URIs caducaron), pedir al usuario que
-    // vuelva a seleccionar la carpeta de música para re-mapear los filePaths.
-    var showReselectFolderDialog by remember { mutableStateOf(false) }
-    var remapProgress by remember { mutableStateOf(0) }
-    var isRemapping by remember { mutableStateOf(false) }
-    var remapResult by remember { mutableStateOf<Pair<Int, Int>?>(null) }
 
     val backupFolderLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
@@ -129,61 +110,9 @@ fun SettingsScreen(
     ) { uri ->
         if (uri != null) {
             scope.launch {
-                isRestoring = true
-                restoreProgress = 0
-                try {
-                    val backup = BackupManager.readFromFile(context, uri.toString())
-                    val ok = backup != null && BackupManager.restore(context, backup) { pct ->
-                        restoreProgress = pct.coerceIn(0, 100)
-                    }
-                    if (ok) {
-                        // CRITICAL FIX: verificar si las canciones son accesibles.
-                        // Tras desinstalar, los URIs caducan y las canciones no suenan.
-                        val needsFolder = BackupManager.needsFolderAccess(context)
-                        if (needsFolder) {
-                            // Mostrar diálogo pidiendo re-seleccionar la carpeta.
-                            showReselectFolderDialog = true
-                            backupMessage = null  // no mostrar "OK" todavía
-                        } else {
-                            backupMessage = "OK"
-                        }
-                    } else {
-                        backupMessage = "Error"
-                    }
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                    backupMessage = "Error"
-                } finally {
-                    isRestoring = false
-                    restoreProgress = 0
-                }
-            }
-        }
-    }
-
-    // CRITICAL FIX: launcher para re-seleccionar la carpeta de música tras restore.
-    // Llama a BackupManager.remapFilePaths que re-mapea los filePaths por fileName.
-    val reselectFolderLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocumentTree()
-    ) { uri ->
-        if (uri != null) {
-            scope.launch {
-                isRemapping = true
-                remapProgress = 0
-                try {
-                    val (remapped, total) = BackupManager.remapFilePaths(context, uri.toString()) { pct ->
-                        remapProgress = pct.coerceIn(0, 100)
-                    }
-                    remapResult = Pair(remapped, total)
-                    // Guardar el tree URI para futuros restores.
-                    com.mp3tify.backup.BackupUriManager.saveTreeUri(context, uri)
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                    remapResult = Pair(0, 0)
-                } finally {
-                    isRemapping = false
-                    remapProgress = 0
-                }
+                val backup = BackupManager.readFromFile(context, uri.toString())
+                val ok = backup != null && BackupManager.restore(context, backup)
+                backupMessage = if (ok) "OK" else "Error"
             }
         }
     }
@@ -216,9 +145,7 @@ fun SettingsScreen(
             TopAppBar(
                 title = { Text(t("settings")) },
                 navigationIcon = {
-                    // CRITICAL FIX: bloquear el botón de back mientras se restaura
-                    // para que el usuario no pueda salir y dejar la restauración a medias.
-                    IconButton(onClick = { if (!isRestoring) onBack() }) {
+                    IconButton(onClick = onBack) {
                         Icon(Icons.Filled.ArrowBack, contentDescription = t("back"))
                     }
                 },
@@ -440,155 +367,6 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-        }
-
-        // CRITICAL FIX (Bug restore a medias): overlay de pantalla completa que
-        // bloquea la UI mientras se restaura el backup. El usuario no puede salir
-        // de Settings ni tocar nada hasta que termine. Muestra una barra de
-        // progreso con el porcentaje de recuperación (0-100%).
-        if (isRestoring) {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.8f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Surface(
-                    shape = MaterialTheme.shapes.medium,
-                    color = MaterialTheme.colorScheme.surface
-                ) {
-                    Column(
-                        Modifier.padding(32.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.height(16.dp))
-                        Text(
-                            t("loading_files"),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            "${restoreProgress}%",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        LinearProgressIndicator(
-                            progress = restoreProgress / 100f,
-                            modifier = Modifier.fillMaxWidth(),
-                            color = MaterialTheme.colorScheme.primary,
-                            trackColor = MaterialTheme.colorScheme.surfaceVariant
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            t("loading_files_desc"),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                }
-            }
-        }
-
-        // CRITICAL FIX (Bug restore tras desinstalar): diálogo pidiendo al usuario
-        // que vuelva a seleccionar la carpeta de música tras restaurar un backup
-        // (las URIs content:// caducaron al desinstalar).
-        if (showReselectFolderDialog) {
-            AlertDialog(
-                onDismissRequest = { showReselectFolderDialog = false },
-                title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            Icons.Filled.WarningAmber,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(28.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(t("restore_needs_folder"))
-                    }
-                },
-                text = {
-                    Column {
-                        Text(
-                            t("restore_needs_folder_desc"),
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = {
-                        showReselectFolderDialog = false
-                        try { reselectFolderLauncher.launch(null) } catch (e: Exception) { e.printStackTrace() }
-                    }) {
-                        Icon(Icons.Filled.Folder, contentDescription = null)
-                        Spacer(Modifier.width(6.dp))
-                        Text(t("reselect_folder"))
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showReselectFolderDialog = false }) { Text(t("cancel")) }
-                }
-            )
-        }
-
-        // Overlay de progreso mientras se re-mapean los filePaths.
-        if (isRemapping) {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.8f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Surface(
-                    shape = MaterialTheme.shapes.medium,
-                    color = MaterialTheme.colorScheme.surface
-                ) {
-                    Column(
-                        Modifier.padding(32.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.height(16.dp))
-                        Text(
-                            t("reselect_folder"),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            "${remapProgress}%",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        LinearProgressIndicator(
-                            progress = remapProgress / 100f,
-                            modifier = Modifier.fillMaxWidth(),
-                            color = MaterialTheme.colorScheme.primary,
-                            trackColor = MaterialTheme.colorScheme.surfaceVariant
-                        )
-                    }
-                }
-            }
-        }
-
-        // Diálogo de resultado del remap.
-        remapResult?.let { (remapped, total) ->
-            AlertDialog(
-                onDismissRequest = { remapResult = null },
-                title = { Text(t("reselect_folder")) },
-                text = {
-                    // tf formatea %1$d y %2$d con String.format
-                    Text(tf("restore_remap_done", remapped, total))
-                },
-                confirmButton = {
-                    TextButton(onClick = { remapResult = null }) { Text(t("ok")) }
-                }
-            )
         }
 
         backupMessage?.let { message ->

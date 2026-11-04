@@ -131,8 +131,14 @@ fun LibraryScreen(
         ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
         if (uri != null) {
-            // Guardar el tree URI en SharedPreferences para respaldo (BackupUriManager).
-            com.mp3tify.backup.BackupUriManager.saveTreeUri(context, uri)
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PREFIX_URI_PERMISSION
+                )
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
             vm.importFromFolder(uri.toString()) { result -> onImportDone(result) }
         }
     }
@@ -371,13 +377,12 @@ fun LibraryScreen(
             }
         }
 
-        // Global "Cargando archivos…" overlay while importing.
-        // Mismo estilo que el de PlaylistScreen: título bold + descripción centrada.
+        // Global "Cargando música…" overlay while importing.
         if (importing) {
             Box(
                 Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.7f)),
+                    .background(Color.Black.copy(alpha = 0.6f)),
                 contentAlignment = Alignment.Center
             ) {
                 Surface(
@@ -385,23 +390,12 @@ fun LibraryScreen(
                     color = MaterialTheme.colorScheme.surface
                 ) {
                     Column(
-                        Modifier.padding(32.dp),
+                        Modifier.padding(24.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.height(16.dp))
-                        Text(
-                            t("loading_files"),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            t("loading_files_desc"),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center
-                        )
+                        Spacer(Modifier.height(12.dp))
+                        Text(t("loading_music"))
                     }
                 }
             }
