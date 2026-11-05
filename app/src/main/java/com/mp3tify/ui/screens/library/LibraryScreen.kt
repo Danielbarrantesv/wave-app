@@ -398,6 +398,7 @@ fun LibraryScreen(
                     }
                 }
             }
+                } // closes Column added for fixed SelectionBanner
         }
 
         // Global "Cargando archivos…" overlay while importing.
