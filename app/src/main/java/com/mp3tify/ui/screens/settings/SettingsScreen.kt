@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DriveEta
 import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PhoneAndroid
@@ -68,6 +69,7 @@ import com.mp3tify.cloud.CloudBackupManager
 import com.mp3tify.data.repository.Repository
 import com.mp3tify.ui.components.ToggleRow
 import com.mp3tify.ui.t
+import com.mp3tify.ui.tf
 import com.mp3tify.ui.theme.AccentColor
 import com.mp3tify.util.AppLanguage
 import com.mp3tify.util.Preferences
@@ -100,6 +102,10 @@ fun SettingsScreen(
     var wipeDoneMessage by remember { mutableStateOf<String?>(null) }
     var isRestoring by remember { mutableStateOf(false) }
     var restoreProgress by remember { mutableStateOf(0) }
+    var showReselectFolderDialog by remember { mutableStateOf(false) }
+    var isRemapping by remember { mutableStateOf(false) }
+    var remapProgress by remember { mutableStateOf(0) }
+    var remapResult by remember { mutableStateOf<Pair<Int, Int>?>(null) }
 
     val backupFolderLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
@@ -124,13 +130,47 @@ fun SettingsScreen(
                     val ok = backup != null && BackupManager.restore(context, backup) { pct ->
                         restoreProgress = pct.coerceIn(0, 100)
                     }
-                    backupMessage = if (ok) "OK" else "Error"
+                    if (ok) {
+                        val needsFolder = BackupManager.needsFolderAccess(context)
+                        if (needsFolder) {
+                            showReselectFolderDialog = true
+                            backupMessage = null
+                        } else {
+                            backupMessage = "OK"
+                        }
+                    } else {
+                        backupMessage = "Error"
+                    }
                 } catch (e: Exception) {
                     e.printStackTrace()
                     backupMessage = "Error"
                 } finally {
                     isRestoring = false
                     restoreProgress = 0
+                }
+            }
+        }
+    }
+
+    val reselectFolderLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                isRemapping = true
+                remapProgress = 0
+                try {
+                    val (remapped, total) = BackupManager.remapFilePaths(context, uri.toString()) { pct ->
+                        remapProgress = pct.coerceIn(0, 100)
+                    }
+                    remapResult = Pair(remapped, total)
+                    com.mp3tify.backup.BackupUriManager.saveTreeUri(context, uri)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    remapResult = Pair(0, 0)
+                } finally {
+                    isRemapping = false
+                    remapProgress = 0
                 }
             }
         }
@@ -433,6 +473,56 @@ fun SettingsScreen(
                     }
                 }
             }
+        }
+
+        if (showReselectFolderDialog) {
+            AlertDialog(
+                onDismissRequest = { showReselectFolderDialog = false },
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.WarningAmber, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(t("restore_needs_folder"))
+                    }
+                },
+                text = { Text(t("restore_needs_folder_desc"), style = MaterialTheme.typography.bodyMedium) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showReselectFolderDialog = false
+                        try { reselectFolderLauncher.launch(null) } catch (e: Exception) { e.printStackTrace() }
+                    }) {
+                        Icon(Icons.Filled.Folder, contentDescription = null)
+                        Spacer(Modifier.width(6.dp))
+                        Text(t("reselect_folder"))
+                    }
+                },
+                dismissButton = { TextButton(onClick = { showReselectFolderDialog = false }) { Text(t("cancel")) } }
+            )
+        }
+
+        if (isRemapping) {
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.8f)), contentAlignment = Alignment.Center) {
+                Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surface) {
+                    Column(Modifier.padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.height(16.dp))
+                        Text(t("reselect_folder"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(4.dp))
+                        Text("${remapProgress}%", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.height(12.dp))
+                        LinearProgressIndicator(progress = remapProgress / 100f, modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.primary, trackColor = MaterialTheme.colorScheme.surfaceVariant)
+                    }
+                }
+            }
+        }
+
+        remapResult?.let { (remapped, total) ->
+            AlertDialog(
+                onDismissRequest = { remapResult = null },
+                title = { Text(t("reselect_folder")) },
+                text = { Text(tf("restore_remap_done", remapped, total)) },
+                confirmButton = { TextButton(onClick = { remapResult = null }) { Text(t("ok")) } }
+            )
         }
 
         backupMessage?.let { message ->

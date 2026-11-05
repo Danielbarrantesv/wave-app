@@ -146,6 +146,14 @@ class Repository private constructor(private val context: Context) {
         }
     }
 
+    suspend fun updateSongPaths(songId: Long, filePath: String, artUri: String?) {
+        try {
+            songDao.updateSongPaths(songId, filePath, artUri)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     suspend fun createPlaylist(name: String, description: String? = null, folderUri: String? = null): Long {
         return try {
             val now = System.currentTimeMillis()
