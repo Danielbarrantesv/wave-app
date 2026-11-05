@@ -667,9 +667,9 @@ private fun PlaylistCard(
     onClick: () -> Unit
 ) {
     val context = LocalContext.current
-    val repo = remember { Repository.get(context) }
+    val playlistRepo = remember { Repository.get(context) }
     val songs by remember(playlist.id) {
-        repo.observePlaylistSongs(playlist.id)
+        playlistRepo.observePlaylistSongs(playlist.id)
     }.collectAsState(initial = emptyList())
 
     val isFavorites = playlist.name == Repository.FAVORITES_NAME
