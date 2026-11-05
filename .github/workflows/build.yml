@@ -5,14 +5,14 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
-  workflow_dispatch:  # Permite disparar manualmente desde la pestaña Actions
+  workflow_dispatch:
 
 jobs:
   build:
     name: Build Debug APK + Release
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # Necesario para crear releases
+      contents: write
 
     steps:
       - name: Checkout código
@@ -27,8 +27,8 @@ jobs:
       - name: Configurar Android SDK
         uses: android-actions/setup-android@v3
         with:
-          sdk-platform: 36
-          sdk-build-tools: 36.0.0
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+          accept-android-sdk-licenses: true
 
       - name: Dar permisos de ejecución a gradlew
         run: chmod +x ./gradlew
@@ -38,18 +38,12 @@ jobs:
 
       - name: Renombrar APK con versión
         run: |
-          # Leer versionName del build.gradle.kts
           VERSION=$(grep 'versionName' app/build.gradle.kts | head -1 | sed 's/.*"\(.*\)".*/\1/')
-          # Número de build del run de GitHub Actions (para unicidad)
           RUN_NUM=${{ github.run_number }}
-          # Nombre del archivo: Wave-debug-v2.4.0-build42.apk
           cp app/build/outputs/apk/debug/app-debug.apk "Wave-debug-v${VERSION}-build${RUN_NUM}.apk"
           echo "APK_FILE=Wave-debug-v${VERSION}-build${RUN_NUM}.apk" >> $GITHUB_ENV
           echo "RELEASE_TAG=v${VERSION}-build${RUN_NUM}" >> $GITHUB_ENV
           echo "RELEASE_NAME=Wave v${VERSION} (build $RUN_NUM)" >> $GITHUB_ENV
-          echo "Archivo: ${{ env.APK_FILE }}"
-          echo "Tag: ${{ env.RELEASE_TAG }}"
-          echo "Nombre: ${{ env.RELEASE_NAME }}"
 
       - name: Subir APK como artifact (caduca en 30 días)
         uses: actions/upload-artifact@v4
@@ -64,14 +58,9 @@ jobs:
           tag_name: ${{ env.RELEASE_TAG }}
           name: ${{ env.RELEASE_NAME }}
           body: |
-            ## Wave v${{ env.RELEASE_NAME }}
+            ## Wave ${{ env.RELEASE_NAME }}
 
             APK Debug compilado automáticamente por GitHub Actions.
-
-            ### Instalación
-            1. Descarga el archivo `Wave-debug-v*.apk` de abajo
-            2. Transfiérelo a tu teléfono
-            3. Ábrelo con el gestor de archivos → Instalar
 
             ### Descarga directa
             ```
