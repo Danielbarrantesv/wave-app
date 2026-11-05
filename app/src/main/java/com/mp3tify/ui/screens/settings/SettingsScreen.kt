@@ -130,7 +130,20 @@ fun SettingsScreen(
                     val ok = backup != null && BackupManager.restore(context, backup) { pct ->
                         restoreProgress = pct.coerceIn(0, 100)
                     }
-                    backupMessage = if (ok) "OK" else "Error"
+                    if (ok) {
+                        // CRITICAL FIX: tras restaurar, verificar si las canciones
+                        // son accesibles. Si no (URIs caducaron tras desinstalar),
+                        // pedir al usuario que re-seleccione la carpeta de música.
+                        val needsFolder = BackupManager.needsFolderAccess(context)
+                        if (needsFolder) {
+                            showReselectFolderDialog = true
+                            backupMessage = null
+                        } else {
+                            backupMessage = "OK"
+                        }
+                    } else {
+                        backupMessage = "Error"
+                    }
                 } catch (e: Exception) {
                     e.printStackTrace()
                     backupMessage = "Error"
