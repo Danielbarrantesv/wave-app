@@ -36,12 +36,10 @@ import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -421,7 +419,6 @@ fun SettingsScreen(
             Spacer(Modifier.height(4.dp))
             ActionRow(label = t("wipe_data"), icon = Icons.Filled.DeleteForever, onClick = { showWipeDialog = true })
 
-            // ---------------- Actualizar portadas (Last.fm) ----------------
             // ---------------- Acerca de ----------------
             SectionHeader(t("section_about"))
             Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -529,10 +526,6 @@ fun SettingsScreen(
                 text = { Text(tf("restore_remap_done", remapped, total)) },
                 confirmButton = { TextButton(onClick = { remapResult = null }) { Text(t("ok")) } }
             )
-        }
-
-        }
-
         }
 
         backupMessage?.let { message ->
