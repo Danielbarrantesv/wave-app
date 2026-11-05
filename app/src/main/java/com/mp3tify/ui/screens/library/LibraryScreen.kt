@@ -31,6 +31,8 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.PlaylistAdd
+import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shuffle
@@ -194,42 +196,43 @@ fun LibraryScreen(
                 )
             }
         ) { padding ->
-            ScrollbarLazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(
-                    top = padding.calculateTopPadding(),
-                    bottom = padding.calculateBottomPadding() + 96.dp
-                )
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding)
             ) {
+                // SelectionBanner fijo arriba (NO scrollea con la lista)
                 if (selectionMode) {
-                    item {
-                        SelectionBanner(
-                            count = selectedIds.size,
-                            onCreateList = { showNewPlaylistDialog = true },
-                            onAddTo = { showAddToPlaylistDialog = true },
-                            onAddToFavorites = {
-                                scope.launch {
-                                    selectedIds.toList().forEach { id ->
-                                        try {
-                                            val song = songs.firstOrNull { it.id == id }
-                                            if (song != null && !song.isFavorite) vm.toggleFavorite(song)
-                                        } catch (e: Exception) { e.printStackTrace() }
-                                    }
-                                    vm.exitSelectionMode()
-                                }
-                            },
-                            onDelete = {
+                    SelectionBanner(
+                        count = selectedIds.size,
+                        onCreateList = { showNewPlaylistDialog = true },
+                        onAddTo = { showAddToPlaylistDialog = true },
+                        onAddToFavorites = {
+                            scope.launch {
                                 selectedIds.toList().forEach { id ->
-                                    val song = songs.firstOrNull { it.id == id }
-                                    if (song != null) vm.deleteSong(song)
+                                    try {
+                                        val song = songs.firstOrNull { it.id == id }
+                                        if (song != null && !song.isFavorite) vm.toggleFavorite(song)
+                                    } catch (e: Exception) { e.printStackTrace() }
                                 }
                                 vm.exitSelectionMode()
-                            },
-                            onExit = { vm.exitSelectionMode() }
-                        )
-                    }
+                            }
+                        },
+                        onDelete = {
+                            selectedIds.toList().forEach { id ->
+                                val song = songs.firstOrNull { it.id == id }
+                                if (song != null) vm.deleteSong(song)
+                            }
+                            vm.exitSelectionMode()
+                        },
+                        onExit = { vm.exitSelectionMode() }
+                    )
                 }
 
+                ScrollbarLazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 96.dp)
+                ) {
                 item {
                     CollageHeader(
                         songs = songs,
@@ -395,6 +398,7 @@ fun LibraryScreen(
                     }
                 }
             }
+                } // closes Column added for fixed SelectionBanner
         }
 
         // Global "Cargando archivos…" overlay while importing.
@@ -582,30 +586,57 @@ private fun SelectionBanner(
 ) {
     Surface(
         color = MaterialTheme.colorScheme.primaryContainer,
+        tonalElevation = 4.dp,
+        shadowElevation = 4.dp,
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
-            Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Exit selection mode
             IconButton(onClick = onExit) {
                 Icon(Icons.Filled.Close, contentDescription = t("cancel"))
             }
+            // Count text (takes remaining space)
             Text(
                 tf("selected_count", count),
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                maxLines = 1
             )
+            // Add to favorites (heart icon, accent tint)
             IconButton(onClick = onAddToFavorites) {
-                Icon(Icons.Filled.Favorite, contentDescription = t("add_to_favorites"), tint = MaterialTheme.colorScheme.primary)
+                Icon(
+                    Icons.Filled.Favorite,
+                    contentDescription = t("add_to_favorites"),
+                    tint = MaterialTheme.colorScheme.primary
+                )
             }
-            TextButton(onClick = onAddTo) { Text(t("add_to_list"), maxLines = 1) }
+            // Add to existing playlist (PlaylistAdd icon)
+            IconButton(onClick = onAddTo) {
+                Icon(
+                    Icons.Filled.PlaylistAdd,
+                    contentDescription = t("add_to_list")
+                )
+            }
+            // Create new playlist with selected (QueueMusic icon)
+            IconButton(onClick = onCreateList) {
+                Icon(
+                    Icons.Filled.QueueMusic,
+                    contentDescription = tf("create_with_count", count)
+                )
+            }
+            // Delete selected (Delete icon, error tint)
             IconButton(onClick = onDelete) {
-                Icon(Icons.Filled.Delete, contentDescription = t("delete_song"), tint = MaterialTheme.colorScheme.error)
-            }
-            TextButton(onClick = onCreateList) {
-                Text(tf("create_with_count", count), maxLines = 1)
+                Icon(
+                    Icons.Filled.Delete,
+                    contentDescription = t("delete_song"),
+                    tint = MaterialTheme.colorScheme.error
+                )
             }
         }
     }
