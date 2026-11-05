@@ -2,10 +2,13 @@ package com.mp3tify.equalizer
 
 import android.content.Context
 import android.media.audiofx.Equalizer
+import android.util.Log
 import com.mp3tify.playback.PlaybackController
 
 /** Wrapper around android.media.audiofx.Equalizer attached to the playback session. */
 object EqualizerManager {
+
+    private const val TAG = "EqualizerManager"
 
     private var equalizer: Equalizer? = null
     private var appCtx: Context? = null
@@ -48,11 +51,12 @@ object EqualizerManager {
         return try {
             if (equalizer != null) return true
             val sessionId = PlaybackController.getAudioSessionId()
+            Log.i(TAG, "init: PlaybackController.getAudioSessionId() = $sessionId")
             if (sessionId == 0) return false
             attachInternal(sessionId)
             true
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e(TAG, "init failed", e)
             false
         }
     }
@@ -65,17 +69,16 @@ object EqualizerManager {
     fun reattachToSession(newSessionId: Int) {
         try {
             if (newSessionId == 0) return
-            // Si ya estamos attachados a la misma sesión, no hacer nada
+            Log.i(TAG, "reattachToSession: $newSessionId (current EQ present? ${equalizer != null})")
             val currentEq = equalizer
             if (currentEq != null) {
-                // Liberar el EQ viejo y crear uno nuevo sobre la nueva sesión
                 try { currentEq.enabled = false } catch (_: Exception) {}
                 try { currentEq.release() } catch (_: Exception) {}
                 equalizer = null
             }
             attachInternal(newSessionId)
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e(TAG, "reattachToSession failed", e)
         }
     }
 
@@ -85,54 +88,62 @@ object EqualizerManager {
     private fun attachInternal(sessionId: Int) {
         val eq = Equalizer(0, sessionId)
         equalizer = eq
+        Log.i(TAG, "attachInternal: created Equalizer on session $sessionId, enabled=$userEnabled, bands=${eq.numberOfBands}, range=[${eq.bandLevelRange[0]},${eq.bandLevelRange[1]}]")
         // Re-aplicar el estado del usuario
-        try { eq.enabled = userEnabled } catch (_: Exception) {}
+        try { eq.enabled = userEnabled } catch (e: Exception) { Log.w(TAG, "setEnabled failed", e) }
         val bands = eq.numberOfBands.toInt()
         val range = eq.bandLevelRange
         for (i in 0 until bands) {
             val gain = userBandGains.getOrElse(i) { 0 }
             if (gain != 0) {
                 val clamped = gain.coerceIn(range[0].toInt(), range[1].toInt())
-                try { eq.setBandLevel(i.toShort(), clamped.toShort()) } catch (_: Exception) {}
+                try { eq.setBandLevel(i.toShort(), clamped.toShort()) } catch (e: Exception) {
+                    Log.w(TAG, "setBandLevel($i, $clamped) failed", e)
+                }
             }
         }
     }
 
     fun setEnabled(enabled: Boolean) {
+        Log.i(TAG, "setEnabled: $enabled (was $userEnabled)")
         userEnabled = enabled
         try {
             equalizer?.enabled = enabled
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e(TAG, "setEnabled failed", e)
         }
     }
 
     fun applyPreset(preset: EqPreset): Boolean {
+        Log.i(TAG, "applyPreset: ${preset.key} gains=${preset.gains.toList()}")
         return try {
-            val eq = equalizer ?: return false
+            val eq = equalizer ?: run {
+                Log.w(TAG, "applyPreset: equalizer is null, cannot apply")
+                return false
+            }
             val bands = eq.numberOfBands.toInt()
             val range = eq.bandLevelRange
             for (i in 0 until bands) {
                 val gain = preset.gains.getOrElse(i) { 0 }
                 val clamped = gain.coerceIn(range[0].toInt(), range[1].toInt())
                 eq.setBandLevel(i.toShort(), clamped.toShort())
-                // Persistir para re-aplicar tras re-attach
                 if (i < userBandGains.size) userBandGains[i] = gain
             }
             true
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e(TAG, "applyPreset failed", e)
             false
         }
     }
 
     fun setBandGain(band: Short, gain: Int) {
         val idx = band.toInt()
+        Log.i(TAG, "setBandGain: band=$idx gain=$gain")
         if (idx in 0 until userBandGains.size) userBandGains[idx] = gain
         try {
             equalizer?.setBandLevel(band, gain.toShort())
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e(TAG, "setBandGain failed", e)
         }
     }
 
