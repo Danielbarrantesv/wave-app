@@ -100,14 +100,18 @@ object LastFmClient {
                     val info = getTrackInfo(context, title, artist)
                     if (info != null) { cover = info.coverUrl; if (album.isNullOrBlank()) album = info.album }
                 }
-                var newArt = song.artUri
-                if (!cover.isNullOrBlank()) { downloadCover(context, cover, song.filePath)?.let { newArt = it } }
+                var newArt: String? = song.artUri
+                var artChanged = false
+                if (!cover.isNullOrBlank()) {
+                    val downloaded = downloadCover(context, cover, song.filePath)
+                    if (downloaded != null) { newArt = downloaded; artChanged = true }
+                }
                 var changed = false
                 if (!album.isNullOrBlank() && song.album != album) changed = true
-                if (newArt != song.artUri) changed = true
+                if (artChanged) changed = true
                 if (changed) {
                     if (!album.isNullOrBlank()) repo.updateSongInfo(song.id, song.title, song.artist, album)
-                    if (newArt != null && newArt != song.artUri) repo.updateSongPaths(song.id, song.filePath, newArt)
+                    if (artChanged && newArt != null) repo.updateSongPaths(song.id, song.filePath, newArt)
                     updated++
                 }
             } catch (e: Exception) { e.printStackTrace() }
