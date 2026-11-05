@@ -161,4 +161,13 @@ object BackupManager {
             false
         }
     }
+
+    private fun pathHash(key: String): String {
+        return try {
+            val md = java.security.MessageDigest.getInstance("SHA-1")
+            md.digest(key.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+        } catch (e: Exception) {
+            key.hashCode().toUInt().toString()
+        }
+    }
 }
