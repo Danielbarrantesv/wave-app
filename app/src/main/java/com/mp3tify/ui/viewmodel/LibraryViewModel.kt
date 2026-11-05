@@ -182,6 +182,18 @@ class LibraryViewModel(
         folderUri: String? = null,
         onCreated: (Long) -> Unit = {}
     ) {
+        // Si hay folderUri, activar importing + progress para que el overlay
+        // de "Cargando archivos..." se muestre mientras se importa la carpeta.
+        if (!folderUri.isNullOrBlank()) {
+            importing.value = true
+            importProgress.value = 0
+        }
+        val progressJob = if (!folderUri.isNullOrBlank()) scope.launch {
+            while (importing.value) {
+                if (importProgress.value < 95) importProgress.value += 1
+                kotlinx.coroutines.delay(200)
+            }
+        } else null
         scope.launch {
             try {
                 val id = repo.createPlaylist(name, null, folderUri)
@@ -190,11 +202,18 @@ class LibraryViewModel(
                     if (!folderUri.isNullOrBlank()) {
                         scope.launch(Dispatchers.IO) {
                             try { repo.importFolderIntoPlaylist(folderUri, id) } catch (e: Exception) { e.printStackTrace() }
+                            progressJob?.cancel()
+                            importProgress.value = 100
+                            importing.value = false
                         }
                     }
                 }
                 onCreated(id)
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                progressJob?.cancel()
+                importing.value = false
+            }
         }
     }
 

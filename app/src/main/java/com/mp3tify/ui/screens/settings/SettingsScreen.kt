@@ -130,17 +130,7 @@ fun SettingsScreen(
                     val ok = backup != null && BackupManager.restore(context, backup) { pct ->
                         restoreProgress = pct.coerceIn(0, 100)
                     }
-                    if (ok) {
-                        val needsFolder = BackupManager.needsFolderAccess(context)
-                        if (needsFolder) {
-                            showReselectFolderDialog = true
-                            backupMessage = null
-                        } else {
-                            backupMessage = "OK"
-                        }
-                    } else {
-                        backupMessage = "Error"
-                    }
+                    backupMessage = if (ok) "OK" else "Error"
                 } catch (e: Exception) {
                     e.printStackTrace()
                     backupMessage = "Error"
