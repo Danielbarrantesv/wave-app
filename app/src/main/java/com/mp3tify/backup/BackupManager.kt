@@ -93,6 +93,88 @@ object BackupManager {
             }
         }
 
+    /**
+     * Verifica si las canciones restauradas tienen filePaths accesibles.
+     * Tras una reinstalacion, los URIs content:// del backup caducan.
+     */
+    suspend fun needsFolderAccess(context: Context): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val repo = Repository.get(context)
+            val songs = repo.allSongs()
+            if (songs.isEmpty()) return@withContext false
+            songs.take(5).any { song ->
+                try {
+                    context.contentResolver.openInputStream(Uri.parse(song.filePath))?.use { true } ?: false
+                } catch (e: Exception) { false } == false
+            }
+        } catch (e: Exception) { e.printStackTrace(); false }
+    }
+
+    /**
+     * Re-mapea los filePaths de las canciones por nombre de archivo.
+     */
+    suspend fun remapFilePaths(
+        context: Context,
+        treeUriString: String,
+        onProgress: (Int) -> Unit = {}
+    ): Pair<Int, Int> = withContext(Dispatchers.IO) {
+        var remapped = 0; var total = 0
+        try {
+            val repo = Repository.get(context)
+            val songs = repo.allSongs()
+            total = songs.size
+            if (total == 0) return@withContext Pair(0, 0)
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    Uri.parse(treeUriString),
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PREFIX_URI_PERMISSION
+                )
+            } catch (e: Exception) { e.printStackTrace() }
+            BackupUriManager.saveTreeUri(context, Uri.parse(treeUriString))
+            val tree = DocumentFile.fromTreeUri(context, Uri.parse(treeUriString))
+            if (tree == null) return@withContext Pair(0, total)
+            val files = mutableListOf<DocumentFile>()
+            fun walk(root: DocumentFile, out: MutableList<DocumentFile>, depth: Int) {
+                if (depth > 8) return
+                try { for (child in root.listFiles()) {
+                    if (child.isDirectory) walk(child, out, depth + 1) else out.add(child)
+                } } catch (e: Exception) {}
+            }
+            walk(tree, files, 0)
+            val nameToUri = files.associate { (it.name ?: "") to it.uri.toString() }
+            val artDir = java.io.File(context.cacheDir, "art")
+            if (!artDir.exists()) artDir.mkdirs()
+            songs.forEachIndexed { idx, song ->
+                val isAccessible = try {
+                    context.contentResolver.openInputStream(Uri.parse(song.filePath))?.use { true } ?: false
+                } catch (e: Exception) { false }
+                if (!isAccessible) {
+                    val newUri = nameToUri[song.fileName]
+                    if (newUri != null) {
+                        try {
+                            val retriever = android.media.MediaMetadataRetriever()
+                            var newArtUri: String? = song.artUri
+                            try {
+                                retriever.setDataSource(context, Uri.parse(newUri))
+                                val bytes = retriever.embeddedPicture
+                                if (bytes != null && bytes.isNotEmpty()) {
+                                    val hash = pathHash(newUri)
+                                    val artFile = java.io.File(artDir, "art_$hash.jpg")
+                                    if (!artFile.exists()) java.io.FileOutputStream(artFile).use { it.write(bytes) }
+                                    newArtUri = artFile.absolutePath
+                                }
+                            } finally { try { retriever.release() } catch (_: Exception) {} }
+                            repo.updateSongPaths(song.id, newUri, newArtUri)
+                            remapped++
+                        } catch (e: Exception) { e.printStackTrace() }
+                    }
+                }
+                onProgress(((idx + 1) * 100) / total)
+            }
+        } catch (e: Exception) { e.printStackTrace() }
+        Pair(remapped, total)
+    }
+
     /** Restores songs + playlists, deduping against what already exists.
      *  [onProgress] recibe el porcentaje (0-100) para la barra de progreso. */
     suspend fun restore(
