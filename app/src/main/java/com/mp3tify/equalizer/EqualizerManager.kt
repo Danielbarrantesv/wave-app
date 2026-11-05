@@ -1,7 +1,6 @@
 package com.mp3tify.equalizer
 
 import android.content.Context
-import android.media.AudioManager
 import android.media.audiofx.Equalizer
 import com.mp3tify.playback.PlaybackController
 
@@ -10,6 +9,12 @@ object EqualizerManager {
 
     private var equalizer: Equalizer? = null
     private var appCtx: Context? = null
+
+    // CRITICAL (Bug EQ no funciona): persistir el estado del usuario para re-aplicarlo
+    // cuando el EQ se re-attacha a una nueva sesión (ExoPlayer puede cambiar sessionId
+    // tras el primer playback).
+    private var userEnabled: Boolean = true
+    private var userBandGains: IntArray = IntArray(5) // 0 = sin cambio
 
     data class EqPreset(val key: String, val gains: IntArray)
 
@@ -29,23 +34,22 @@ object EqualizerManager {
     }
 
     /**
-     * Attach the equalizer to an audio session. CRITICAL FIX (Bug eq no funciona):
-     * if PlaybackController's session id is 0 (player not yet ready), generate a
-     * fresh one with AudioManager.generateAudioSessionId() and use that.
+     * Attach the equalizer to the playback session.
+     *
+     * CRITICAL FIX (Bug EQ no funciona):
+     * NO generar un sessionId alternativo si PlaybackController reporta 0. Eso attachaba
+     * el EQ a una sesión vacía distinta de la que ExoPlayer usa, y el EQ no afectaba el
+     * audio. Ahora: si PlaybackController.getAudioSessionId() devuelve 0 (player aún no
+     * listo), se retorna false y la UI muestra "needs audio" + botón Reintentar. Cuando
+     * el player se conecta y commitea su sessionId, refreshState() de PlaybackController
+     * llamará a reattachToSession() automáticamente.
      */
     fun init(): Boolean {
         return try {
             if (equalizer != null) return true
-            var sessionId = PlaybackController.getAudioSessionId()
-            if (sessionId == 0) {
-                val ctx = appCtx
-                if (ctx != null) {
-                    val am = ctx.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-                    sessionId = am?.generateAudioSessionId() ?: 0
-                }
-            }
+            val sessionId = PlaybackController.getAudioSessionId()
             if (sessionId == 0) return false
-            equalizer = Equalizer(0, sessionId)
+            attachInternal(sessionId)
             true
         } catch (e: Exception) {
             e.printStackTrace()
@@ -53,7 +57,49 @@ object EqualizerManager {
         }
     }
 
+    /**
+     * Re-attach the equalizer to a new audio session id (called by PlaybackController when
+     * ExoPlayer's audioSessionId changes after first playback). Preserves the user's enabled
+     * state and band gains so the EQ stays applied across track changes.
+     */
+    fun reattachToSession(newSessionId: Int) {
+        try {
+            if (newSessionId == 0) return
+            // Si ya estamos attachados a la misma sesión, no hacer nada
+            val currentEq = equalizer
+            if (currentEq != null) {
+                // Liberar el EQ viejo y crear uno nuevo sobre la nueva sesión
+                try { currentEq.enabled = false } catch (_: Exception) {}
+                try { currentEq.release() } catch (_: Exception) {}
+                equalizer = null
+            }
+            attachInternal(newSessionId)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    /**
+     * Crea el Equalizer sobre sessionId y re-aplica el estado del usuario (enabled + band gains).
+     */
+    private fun attachInternal(sessionId: Int) {
+        val eq = Equalizer(0, sessionId)
+        equalizer = eq
+        // Re-aplicar el estado del usuario
+        try { eq.enabled = userEnabled } catch (_: Exception) {}
+        val bands = eq.numberOfBands.toInt()
+        val range = eq.bandLevelRange
+        for (i in 0 until bands) {
+            val gain = userBandGains.getOrElse(i) { 0 }
+            if (gain != 0) {
+                val clamped = gain.coerceIn(range[0].toInt(), range[1].toInt())
+                try { eq.setBandLevel(i.toShort(), clamped.toShort()) } catch (_: Exception) {}
+            }
+        }
+    }
+
     fun setEnabled(enabled: Boolean) {
+        userEnabled = enabled
         try {
             equalizer?.enabled = enabled
         } catch (e: Exception) {
@@ -70,6 +116,8 @@ object EqualizerManager {
                 val gain = preset.gains.getOrElse(i) { 0 }
                 val clamped = gain.coerceIn(range[0].toInt(), range[1].toInt())
                 eq.setBandLevel(i.toShort(), clamped.toShort())
+                // Persistir para re-aplicar tras re-attach
+                if (i < userBandGains.size) userBandGains[i] = gain
             }
             true
         } catch (e: Exception) {
@@ -79,6 +127,7 @@ object EqualizerManager {
     }
 
     fun setBandGain(band: Short, gain: Int) {
+        if (band >= 0 && band < userBandGains.size) userBandGains[band] = gain
         try {
             equalizer?.setBandLevel(band, gain.toShort())
         } catch (e: Exception) {

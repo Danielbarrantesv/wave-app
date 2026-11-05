@@ -14,6 +14,7 @@ import com.mp3tify.data.model.displayAlbum
 import com.mp3tify.data.model.displayArtist
 import com.mp3tify.data.model.displayTitle
 import com.mp3tify.data.repository.Repository
+import com.mp3tify.equalizer.EqualizerManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -53,6 +54,17 @@ object PlaybackController {
     private var lastRecordedWindow = -1
     private var volumeBoost = 1.0f
 
+    /**
+     * CRITICAL (Bug EQ no funciona): audio session ID que seteamos en ExoPlayer durante connect().
+     * ExoPlayer.audioSessionId puede devolver 0 antes del primer playback aunque hayamos llamado
+     * a setAudioSessionId(). Si devolvemos 0, EqualizerManager cae al fallback de generar otra
+     * sesión distinta y el EQ no afecta el audio real. Guardamos el ID que seteamos y lo
+     * devolvemos directamente; si ExoPlayer reporta uno distinto tras el primer playback,
+     * lo sincronizamos en refreshState().
+     */
+    @Volatile
+    private var committedAudioSessionId: Int = 0
+
     /** Exposes the shared player to MediaPlaybackService (MediaSession). */
     fun playerOrNull(): Player? = player
 
@@ -78,7 +90,13 @@ object PlaybackController {
             try {
                 val am = context.applicationContext.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
                 val sessionId = am?.generateAudioSessionId() ?: 0
-                if (sessionId != 0) (p as? ExoPlayer)?.setAudioSessionId(sessionId)
+                if (sessionId != 0) {
+                    (p as? ExoPlayer)?.setAudioSessionId(sessionId)
+                    // CRITICAL (Bug EQ no funciona): guardar el ID que seteamos para que
+                    // getAudioSessionId() lo devuelva aunque ExoPlayer.audioSessionId aún
+                    // reporte 0 antes del primer playback.
+                    committedAudioSessionId = sessionId
+                }
             } catch (e: Exception) { e.printStackTrace() }
 
             p.addListener(object : Player.Listener {
@@ -144,6 +162,14 @@ object PlaybackController {
                 shuffle = p.shuffleModeEnabled,
                 repeatOne = p.repeatMode == Player.REPEAT_MODE_ONE
             )
+            // CRITICAL (Bug EQ no funciona): tras el primer playback, ExoPlayer puede
+            // allocar su propia sesión y cambiar audioSessionId. Si cambia, sincronizar
+            // committedAudioSessionId y pedir al EQ que se re-attach.
+            val currentSid = (p as? ExoPlayer)?.audioSessionId ?: 0
+            if (currentSid != 0 && currentSid != committedAudioSessionId) {
+                committedAudioSessionId = currentSid
+                EqualizerManager.reattachToSession(currentSid)
+            }
         } catch (e: Exception) {
             e.printStackTrace()
             stopPolling()
@@ -345,12 +371,15 @@ object PlaybackController {
     }
 
     fun getAudioSessionId(): Int {
-        var sessionId = 0
-        try {
+        // CRITICAL (Bug EQ no funciona): devolver primero el sessionId que seteamos
+        // durante connect(). ExoPlayer.audioSessionId puede reportar 0 antes del primer
+        // playback aunque hayamos llamado setAudioSessionId().
+        val committed = committedAudioSessionId
+        if (committed != 0) return committed
+        return try {
             val p = player
-            if (p is ExoPlayer) sessionId = p.audioSessionId
-        } catch (e: Exception) { e.printStackTrace() }
-        return sessionId
+            if (p is ExoPlayer) p.audioSessionId else 0
+        } catch (e: Exception) { e.printStackTrace(); 0 }
     }
 
     suspend fun currentPosition(): Long = withContext(Dispatchers.Main) {
