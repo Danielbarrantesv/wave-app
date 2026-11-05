@@ -9,8 +9,10 @@ on:
 
 jobs:
   build:
-    name: Build Debug APK
+    name: Build Debug APK + Release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Necesario para crear releases
 
     steps:
       - name: Checkout código
@@ -34,9 +36,48 @@ jobs:
       - name: Compilar APK Debug
         run: ./gradlew assembleDebug --no-daemon --max-workers=1 -Dorg.gradle.jvmargs="-Xmx2048m -XX:MaxMetaspaceSize=512m"
 
-      - name: Subir APK como artifact
+      - name: Renombrar APK con versión
+        run: |
+          # Leer versionName del build.gradle.kts
+          VERSION=$(grep 'versionName' app/build.gradle.kts | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          # Número de build del run de GitHub Actions (para unicidad)
+          RUN_NUM=${{ github.run_number }}
+          # Nombre del archivo: Wave-debug-v2.4.0-build42.apk
+          cp app/build/outputs/apk/debug/app-debug.apk "Wave-debug-v${VERSION}-build${RUN_NUM}.apk"
+          echo "APK_FILE=Wave-debug-v${VERSION}-build${RUN_NUM}.apk" >> $GITHUB_ENV
+          echo "RELEASE_TAG=v${VERSION}-build${RUN_NUM}" >> $GITHUB_ENV
+          echo "RELEASE_NAME=Wave v${VERSION} (build $RUN_NUM)" >> $GITHUB_ENV
+          echo "Archivo: ${{ env.APK_FILE }}"
+          echo "Tag: ${{ env.RELEASE_TAG }}"
+          echo "Nombre: ${{ env.RELEASE_NAME }}"
+
+      - name: Subir APK como artifact (caduca en 30 días)
         uses: actions/upload-artifact@v4
         with:
           name: Wave-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
+
+      - name: Crear GitHub Release con APK (link permanente)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ env.RELEASE_NAME }}
+          body: |
+            ## Wave v${{ env.RELEASE_NAME }}
+
+            APK Debug compilado automáticamente por GitHub Actions.
+
+            ### Instalación
+            1. Descarga el archivo `Wave-debug-v*.apk` de abajo
+            2. Transfiérelo a tu teléfono
+            3. Ábrelo con el gestor de archivos → Instalar
+
+            ### Descarga directa
+            ```
+            https://github.com/Danielbarrantesv/wave-app/releases/download/${{ env.RELEASE_TAG }}/${{ env.APK_FILE }}
+            ```
+          files: ${{ env.APK_FILE }}
+          prerelease: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
