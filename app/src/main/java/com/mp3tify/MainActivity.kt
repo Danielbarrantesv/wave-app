@@ -119,9 +119,7 @@ class MainActivity : ComponentActivity() {
                         },
                         title = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Filled.Language, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                                Spacer(Modifier.width(8.dp))
-                                Text("Select Language / Idioma / 言語 / Sprache / Langue / 언어")
+                                Icon(Icons.Filled.Language, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
                             }
                         },
                         text = {
