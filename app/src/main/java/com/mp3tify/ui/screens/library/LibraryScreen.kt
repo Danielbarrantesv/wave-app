@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DriveEta
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Folder
@@ -208,10 +209,10 @@ fun LibraryScreen(
                             onAddTo = { showAddToPlaylistDialog = true },
                             onAddToFavorites = {
                                 scope.launch {
-                                    selectedIds.forEach { id ->
+                                    selectedIds.toList().forEach { id ->
                                         try {
                                             val song = songs.firstOrNull { it.id == id }
-                                            if (song != null && !song.isFavorite) repo.toggleFavorite(song)
+                                            if (song != null && !song.isFavorite) vm.toggleFavorite(song)
                                         } catch (e: Exception) { e.printStackTrace() }
                                     }
                                     vm.exitSelectionMode()
