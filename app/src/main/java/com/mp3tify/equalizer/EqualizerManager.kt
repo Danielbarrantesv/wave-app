@@ -127,7 +127,8 @@ object EqualizerManager {
     }
 
     fun setBandGain(band: Short, gain: Int) {
-        if (band >= 0 && band < userBandGains.size) userBandGains[band] = gain
+        val idx = band.toInt()
+        if (idx in 0 until userBandGains.size) userBandGains[idx] = gain
         try {
             equalizer?.setBandLevel(band, gain.toShort())
         } catch (e: Exception) {
