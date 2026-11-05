@@ -35,12 +35,15 @@ import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -57,6 +60,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.mp3tify.backup.BackupManager
 import com.mp3tify.cloud.CloudBackupManager
@@ -93,6 +98,8 @@ fun SettingsScreen(
     var langMenuOpen by remember { mutableStateOf(false) }
     var showWipeDialog by remember { mutableStateOf(false) }
     var wipeDoneMessage by remember { mutableStateOf<String?>(null) }
+    var isRestoring by remember { mutableStateOf(false) }
+    var restoreProgress by remember { mutableStateOf(0) }
 
     val backupFolderLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
@@ -110,9 +117,21 @@ fun SettingsScreen(
     ) { uri ->
         if (uri != null) {
             scope.launch {
-                val backup = BackupManager.readFromFile(context, uri.toString())
-                val ok = backup != null && BackupManager.restore(context, backup)
-                backupMessage = if (ok) "OK" else "Error"
+                isRestoring = true
+                restoreProgress = 0
+                try {
+                    val backup = BackupManager.readFromFile(context, uri.toString())
+                    val ok = backup != null && BackupManager.restore(context, backup) { pct ->
+                        restoreProgress = pct.coerceIn(0, 100)
+                    }
+                    backupMessage = if (ok) "OK" else "Error"
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    backupMessage = "Error"
+                } finally {
+                    isRestoring = false
+                    restoreProgress = 0
+                }
             }
         }
     }
@@ -145,7 +164,7 @@ fun SettingsScreen(
             TopAppBar(
                 title = { Text(t("settings")) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = { if (!isRestoring) onBack() }) {
                         Icon(Icons.Filled.ArrowBack, contentDescription = t("back"))
                     }
                 },
@@ -366,6 +385,53 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+        }
+
+        if (isRestoring) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.8f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.surface
+                ) {
+                    Column(
+                        Modifier.padding(32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.height(16.dp))
+                        Text(
+                            t("loading_files"),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "${restoreProgress}%",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        LinearProgressIndicator(
+                            progress = restoreProgress / 100f,
+                            modifier = Modifier.fillMaxWidth(),
+                            color = MaterialTheme.colorScheme.primary,
+                            trackColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            t("loading_files_desc"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
             }
         }
 
