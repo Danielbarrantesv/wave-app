@@ -206,6 +206,24 @@ fun LibraryScreen(
                             count = selectedIds.size,
                             onCreateList = { showNewPlaylistDialog = true },
                             onAddTo = { showAddToPlaylistDialog = true },
+                            onAddToFavorites = {
+                                scope.launch {
+                                    selectedIds.forEach { id ->
+                                        try {
+                                            val song = songs.firstOrNull { it.id == id }
+                                            if (song != null && !song.isFavorite) repo.toggleFavorite(song)
+                                        } catch (e: Exception) { e.printStackTrace() }
+                                    }
+                                    vm.exitSelectionMode()
+                                }
+                            },
+                            onDelete = {
+                                selectedIds.toList().forEach { id ->
+                                    val song = songs.firstOrNull { it.id == id }
+                                    if (song != null) vm.deleteSong(song)
+                                }
+                                vm.exitSelectionMode()
+                            },
                             onExit = { vm.exitSelectionMode() }
                         )
                     }
@@ -557,6 +575,8 @@ private fun SelectionBanner(
     count: Int,
     onCreateList: () -> Unit,
     onAddTo: () -> Unit,
+    onAddToFavorites: () -> Unit,
+    onDelete: () -> Unit,
     onExit: () -> Unit
 ) {
     Surface(
@@ -576,10 +596,16 @@ private fun SelectionBanner(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
+            IconButton(onClick = onAddToFavorites) {
+                Icon(Icons.Filled.Favorite, contentDescription = t("add_to_favorites"), tint = MaterialTheme.colorScheme.primary)
+            }
+            TextButton(onClick = onAddTo) { Text(t("add_to_list"), maxLines = 1) }
+            IconButton(onClick = onDelete) {
+                Icon(Icons.Filled.Delete, contentDescription = t("delete_song"), tint = MaterialTheme.colorScheme.error)
+            }
             TextButton(onClick = onCreateList) {
                 Text(tf("create_with_count", count), maxLines = 1)
             }
-            TextButton(onClick = onAddTo) { Text(t("add_to_list"), maxLines = 1) }
         }
     }
 }
