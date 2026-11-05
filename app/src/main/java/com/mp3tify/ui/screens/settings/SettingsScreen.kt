@@ -66,7 +66,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.mp3tify.LastFmClient
 import com.mp3tify.backup.BackupManager
 import com.mp3tify.cloud.CloudBackupManager
 import com.mp3tify.data.repository.Repository
@@ -109,9 +108,6 @@ fun SettingsScreen(
     var isRemapping by remember { mutableStateOf(false) }
     var remapProgress by remember { mutableStateOf(0) }
     var remapResult by remember { mutableStateOf<Pair<Int, Int>?>(null) }
-    var isUpdatingCovers by remember { mutableStateOf(false) }
-    var coverProgress by remember { mutableStateOf(0) }
-    var coverResult by remember { mutableStateOf<Pair<Int, Int>?>(null) }
 
     val backupFolderLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
@@ -426,16 +422,6 @@ fun SettingsScreen(
             ActionRow(label = t("wipe_data"), icon = Icons.Filled.DeleteForever, onClick = { showWipeDialog = true })
 
             // ---------------- Actualizar portadas (Last.fm) ----------------
-            SectionHeader(t("update_covers"))
-            Text(t("update_covers_desc"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp))
-            Spacer(Modifier.height(4.dp))
-            var lastFmKey by remember { mutableStateOf(LastFmClient.getApiKey(context) ?: "") }
-            OutlinedTextField(value = lastFmKey, onValueChange = { lastFmKey = it }, label = { Text(t("lastfm_api_key")) }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp))
-            Spacer(Modifier.height(8.dp))
-            Button(onClick = { LastFmClient.setApiKey(context, lastFmKey.trim()); scope.launch { isUpdatingCovers = true; coverProgress = 0; try { val (u, t2) = LastFmClient.updateAllMetadata(context) { p -> coverProgress = p.coerceIn(0,100) }; coverResult = Pair(u,t2) } catch (e: Exception) { e.printStackTrace(); coverResult = Pair(0,0) } finally { isUpdatingCovers = false; coverProgress = 0 } } }, enabled = lastFmKey.isNotBlank() && !isUpdatingCovers, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-                Icon(Icons.Filled.CloudDownload, contentDescription = null); Spacer(Modifier.width(6.dp)); Text(t("update_covers"))
-            }
-
             // ---------------- Acerca de ----------------
             SectionHeader(t("section_about"))
             Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -545,24 +531,8 @@ fun SettingsScreen(
             )
         }
 
-        if (isUpdatingCovers) {
-            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.8f)), contentAlignment = Alignment.Center) {
-                Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surface) {
-                    Column(Modifier.padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.height(16.dp))
-                        Text(t("update_covers"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.height(4.dp))
-                        Text("${coverProgress}%", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Spacer(Modifier.height(12.dp))
-                        LinearProgressIndicator(progress = coverProgress / 100f, modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.primary, trackColor = MaterialTheme.colorScheme.surfaceVariant)
-                    }
-                }
-            }
         }
 
-        coverResult?.let { (updated, total) ->
-            AlertDialog(onDismissRequest = { coverResult = null }, title = { Text(t("update_covers")) }, text = { Text("$updated / $total") }, confirmButton = { TextButton(onClick = { coverResult = null }) { Text(t("ok")) } })
         }
 
         backupMessage?.let { message ->
