@@ -28,6 +28,7 @@ class PlaylistViewModel(
         .stateIn(scope, SharingStarted.Lazily, emptyList())
 
     val importing = MutableStateFlow(false)
+    val importProgress = MutableStateFlow(0)
 
     fun play(song: Song) {
         try {
@@ -91,27 +92,37 @@ class PlaylistViewModel(
 
     fun importFolder(uri: String, onDone: (Repository.ImportResult?) -> Unit = {}) {
         importing.value = true
+        importProgress.value = 0
+        val progressJob = scope.launch {
+            while (importing.value) {
+                if (importProgress.value < 95) importProgress.value += 1
+                kotlinx.coroutines.delay(200)
+            }
+        }
         scope.launch(Dispatchers.IO) {
             var result: Repository.ImportResult? = null
-            try {
-                result = repo.importFolderIntoPlaylist(uri, playlistId)
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
+            try { result = repo.importFolderIntoPlaylist(uri, playlistId) } catch (e: Exception) { e.printStackTrace() }
+            progressJob.cancel()
+            importProgress.value = 100
             importing.value = false
-            try {
-                onDone(result)
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
+            try { onDone(result) } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
     fun importFiles(uris: List<String>, onDone: (Repository.ImportResult?) -> Unit = {}) {
         importing.value = true
+        importProgress.value = 0
+        val progressJob = scope.launch {
+            while (importing.value) {
+                if (importProgress.value < 95) importProgress.value += 1
+                kotlinx.coroutines.delay(200)
+            }
+        }
         scope.launch(Dispatchers.IO) {
             var result: Repository.ImportResult? = null
             try { result = repo.importFiles(uris, playlistId) } catch (e: Exception) { e.printStackTrace() }
+            progressJob.cancel()
+            importProgress.value = 100
             importing.value = false
             try { onDone(result) } catch (e: Exception) { e.printStackTrace() }
         }

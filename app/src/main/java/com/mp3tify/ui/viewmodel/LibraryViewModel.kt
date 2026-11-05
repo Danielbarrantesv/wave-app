@@ -35,6 +35,7 @@ class LibraryViewModel(
         .stateIn(scope, SharingStarted.Lazily, emptyList())
 
     val importing = MutableStateFlow(false)
+    val importProgress = MutableStateFlow(0)
     val importMessage = MutableStateFlow<String?>(null)
 
     val selectionMode = MutableStateFlow(false)
@@ -56,6 +57,14 @@ class LibraryViewModel(
 
     fun importFromFolder(uri: String, onDone: (Repository.ImportResult?) -> Unit = {}) {
         importing.value = true
+        importProgress.value = 0
+        // Timer de progreso: sube gradualmente hasta 95% mientras el import corre.
+        val progressJob = scope.launch {
+            while (importing.value) {
+                if (importProgress.value < 95) importProgress.value += 1
+                kotlinx.coroutines.delay(200)
+            }
+        }
         scope.launch(Dispatchers.IO) {
             var result: Repository.ImportResult? = null
             try {
@@ -63,6 +72,8 @@ class LibraryViewModel(
             } catch (e: Exception) {
                 e.printStackTrace()
             }
+            progressJob.cancel()
+            importProgress.value = 100
             importing.value = false
             try {
                 onDone(result)
@@ -74,9 +85,18 @@ class LibraryViewModel(
 
     fun importFiles(uris: List<String>, onDone: (Repository.ImportResult?) -> Unit = {}) {
         importing.value = true
+        importProgress.value = 0
+        val progressJob = scope.launch {
+            while (importing.value) {
+                if (importProgress.value < 95) importProgress.value += 1
+                kotlinx.coroutines.delay(200)
+            }
+        }
         scope.launch(Dispatchers.IO) {
             var result: Repository.ImportResult? = null
             try { result = repo.importFiles(uris) } catch (e: Exception) { e.printStackTrace() }
+            progressJob.cancel()
+            importProgress.value = 100
             importing.value = false
             try { onDone(result) } catch (e: Exception) { e.printStackTrace() }
         }

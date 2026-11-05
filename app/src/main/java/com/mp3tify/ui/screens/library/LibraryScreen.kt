@@ -106,6 +106,7 @@ fun LibraryScreen(
     val selectionMode by vm.selectionMode.collectAsState()
     val selectedIds by vm.selectedIds.collectAsState()
     val importing by vm.importing.collectAsState()
+    val importProgress by vm.importProgress.collectAsState()
     val sortOrder by vm.sortOrder.collectAsState()
 
     var showNewPlaylistDialog by remember { mutableStateOf(false) }
@@ -401,6 +402,19 @@ fun LibraryScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Spacer(Modifier.height(4.dp))
+                        Text(
+                            "${importProgress}%",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        androidx.compose.material3.LinearProgressIndicator(
+                            progress = importProgress / 100f,
+                            modifier = Modifier.fillMaxWidth(),
+                            color = MaterialTheme.colorScheme.primary,
+                            trackColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                        Spacer(Modifier.height(8.dp))
                         Text(
                             t("loading_files_desc"),
                             style = MaterialTheme.typography.bodySmall,

@@ -87,6 +87,7 @@ fun PlaylistScreen(
     val playlist by vm.playlist.collectAsState()
     val songs by vm.songs.collectAsState()
     val importing by vm.importing.collectAsState()
+    val importProgress by vm.importProgress.collectAsState()
 
     var menuOpen by remember { mutableStateOf(false) }
     var showRename by remember { mutableStateOf(false) }
@@ -318,6 +319,19 @@ fun PlaylistScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Spacer(Modifier.height(4.dp))
+                        Text(
+                            "${importProgress}%",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        androidx.compose.material3.LinearProgressIndicator(
+                            progress = importProgress / 100f,
+                            modifier = Modifier.fillMaxWidth(),
+                            color = MaterialTheme.colorScheme.primary,
+                            trackColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                        Spacer(Modifier.height(8.dp))
                         Text(
                             t("loading_files_desc"),
                             style = MaterialTheme.typography.bodySmall,
