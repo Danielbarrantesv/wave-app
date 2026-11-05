@@ -6,9 +6,6 @@ local.properties
 .cxx/
 .idea/
 
-# Gradle
-gradle/wrapper/gradle-wrapper.jar
-
 # OS
 .DS_Store
 Thumbs.db
