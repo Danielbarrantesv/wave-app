@@ -1075,7 +1075,17 @@ private fun NewPlaylistDialog(
         },
         confirmButton = {
             TextButton(
-                onClick = { if (name.isNotBlank()) onCreate(name.trim(), folderUri) },
+                // #3 Siempre empezar nombre de playlist en mayuscula.
+                onClick = {
+                    if (name.isNotBlank()) {
+                        val trimmed = name.trim()
+                        // Capitalizar primera letra, mantener resto tal cual.
+                        val capitalizedName = if (trimmed.isNotEmpty()) {
+                            trimmed.substring(0, 1).uppercase() + trimmed.substring(1)
+                        } else trimmed
+                        onCreate(capitalizedName, folderUri)
+                    }
+                },
                 enabled = name.isNotBlank()
             ) { Text(t("create")) }
         },

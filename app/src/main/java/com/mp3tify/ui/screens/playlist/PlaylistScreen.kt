@@ -242,8 +242,12 @@ fun PlaylistScreen(
                                 vm.exitSelectionMode()
                             }
                         },
+                        // #4 FIX: el trash icon en una playlist SOLO remueve de la playlist,
+                        // NO borra de la biblioteca. Antes llamaba a deleteSelectedFromLibrary
+                        // que hacia DELETE FROM songs (la cancion desaparecia de todo el app).
+                        // Ahora llama a removeSelectedFromPlaylist que solo hace DELETE FROM
+                        // playlist_songs (la cancion queda en la biblioteca principal).
                         onRemoveFromPlaylist = { vm.removeSelectedFromPlaylist() },
-                        onDeleteFromLibrary = { vm.deleteSelectedFromLibrary() },
                         onExit = { vm.exitSelectionMode() }
                     )
                 }
@@ -462,7 +466,14 @@ fun PlaylistScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        if (newName.isNotBlank()) vm.rename(newName.trim())
+                        // #3 Capitalizar primera letra al renombrar tambien.
+                        if (newName.isNotBlank()) {
+                            val trimmed = newName.trim()
+                            val capitalized = if (trimmed.isNotEmpty()) {
+                                trimmed.substring(0, 1).uppercase() + trimmed.substring(1)
+                            } else trimmed
+                            vm.rename(capitalized)
+                        }
                         showRename = false
                     },
                     enabled = newName.isNotBlank()
@@ -532,8 +543,8 @@ private fun sortLabel(order: Repository.SortOrder): String = when (order) {
  *  - Count text: "N seleccionadas"
  *  - PlayArrow: reproducir solo las seleccionadas
  *  - Favorite: agregar las seleccionadas a favoritos (si no lo son ya)
- *  - PlaylistRemove: quitar las seleccionadas de esta playlist
- *  - Delete: borrar las seleccionadas de la biblioteca completa
+ *  - Delete: remueve las seleccionadas de ESTA playlist (NO borra de la
+ *    biblioteca — la canción queda en la lista principal). #4
  */
 @Composable
 private fun PlaylistSelectionBanner(
@@ -541,7 +552,6 @@ private fun PlaylistSelectionBanner(
     onPlaySelected: () -> Unit,
     onAddToFavorites: () -> Unit,
     onRemoveFromPlaylist: () -> Unit,
-    onDeleteFromLibrary: () -> Unit,
     onExit: () -> Unit
 ) {
     Surface(
@@ -578,15 +588,12 @@ private fun PlaylistSelectionBanner(
                     tint = MaterialTheme.colorScheme.primary
                 )
             }
-            // Quitar de esta playlist (PlaylistRemove)
+            // #4 Remover de esta playlist (Delete, error tint).
+            // Solo hace DELETE FROM playlist_songs, la canción queda en songs table.
             IconButton(onClick = onRemoveFromPlaylist) {
-                Icon(Icons.Filled.PlaylistRemove, contentDescription = t("remove_from_playlist"))
-            }
-            // Borrar de la biblioteca (Delete, error tint)
-            IconButton(onClick = onDeleteFromLibrary) {
                 Icon(
                     Icons.Filled.Delete,
-                    contentDescription = t("delete_song"),
+                    contentDescription = t("remove_from_playlist"),
                     tint = MaterialTheme.colorScheme.error
                 )
             }

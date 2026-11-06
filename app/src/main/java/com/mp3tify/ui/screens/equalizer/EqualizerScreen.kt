@@ -5,12 +5,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.Button
@@ -74,9 +79,15 @@ fun EqualizerScreen(onBack: () -> Unit) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
+            // CRITICAL #1: windowInsetsPadding(WindowInsets.statusBars) para que el
+            // Row del topBar NO se superponga con la status bar (bateria/hora/wifi).
+            // Antes este Row custom no aplicaba insets y los iconos quedaban pegados
+            // arriba, mezclados con la status bar. Tambien navigationBars en bottom
+            // para landscape.
             Row(
                 Modifier
                     .fillMaxWidth()
+                    .windowInsetsPadding(WindowInsets.statusBars)
                     .padding(horizontal = 4.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -100,11 +111,15 @@ fun EqualizerScreen(onBack: () -> Unit) {
             }
         }
     ) { padding ->
+        // #1 verticalScroll para landscape: si el contenido (presets + sliders + labels)
+        // no cabe en pantalla horizontal, se hace scroll vertical.
         Column(
             Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .verticalScroll(rememberScrollState())
                 .padding(16.dp)
+                .windowInsetsPadding(WindowInsets.navigationBars)
         ) {
             if (!initialized) {
                 Box(
