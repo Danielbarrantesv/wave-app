@@ -70,6 +70,13 @@ class MainActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         super.onCreate(savedInstanceState)
         try { PlaybackController.connect(applicationContext) } catch (e: Exception) { e.printStackTrace() }
+        // CRITICAL FIX (app se congela + pierde cola tras call/kill):
+        // Restaurar la ultima cola guardada para que el usuario pueda resumir
+        // sin tener que volver a seleccionar canciones. La cola se persistio
+        // en SharedPreferences cuando se llamo a setQueue().
+        try {
+            PlaybackController.restoreSavedQueue(Repository.get(applicationContext))
+        } catch (e: Exception) { e.printStackTrace() }
 
         // #2 POST_NOTIFICATIONS runtime permission (Android 13+): sin este permiso
         // concedido en runtime, la MediaStyle notification NO aparece en el quick
