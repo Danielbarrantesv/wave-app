@@ -76,6 +76,9 @@ class Repository private constructor(private val context: Context) {
 
     fun observeFavorites(): Flow<List<Song>> = songDao.observeFavorites()
 
+    /** Canciones reproducidas al menos una vez, ordenadas por última reproducción DESC, limitado a N. */
+    fun observeRecentlyPlayed(limit: Int = 20): Flow<List<Song>> = songDao.observeRecentlyPlayed(limit)
+
     /**
      * Observa artistas agrupados a partir de todas las canciones (#4).
      * Devuelve un Flow de listas ordenadas por nombre de artista (case-insensitive).
