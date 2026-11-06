@@ -228,17 +228,50 @@ object PlaybackController {
         if (path.startsWith("content://") || path.startsWith("file://")) android.net.Uri.parse(path)
         else android.net.Uri.fromFile(File(path))
 
+    /**
+     * Convierte un Song.artUri (path local tipo /data/.../cacheDir/art/art_XYZ.jpg)
+     * en un content:// URI via FileProvider, para que DefaultMediaNotificationProvider
+     * pueda cargarlo como artworkUri en la MediaStyle notification.
+     *
+     * Devuelve null si:
+     *  - artUri es null/blank
+     *  - el archivo no existe (portada perdida tras reinstalar)
+     *  - FileProvider falla
+     */
+    private fun toArtworkUri(song: Song): android.net.Uri? {
+        val artPath = song.artUri?.takeIf { it.isNotBlank() } ?: return null
+        val artFile = File(artPath)
+        if (!artFile.exists()) return null
+        return try {
+            androidx.core.content.FileProvider.getUriForFile(
+                appCtx!!,
+                "${appCtx!!.packageName}.artwork",
+                artFile
+            )
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
     fun setQueue(songs: List<Song>, startIndex: Int) {
         try {
             val p = ensureConnected() ?: return
             if (songs.isEmpty()) return
             val items = songs.map { s ->
+                val metadataBuilder = MediaMetadata.Builder()
+                    .setTitle(s.displayTitle)
+                    .setArtist(s.displayArtist)
+                    .setAlbumTitle(s.displayAlbum)
+                // #2 MediaStyle notification artwork: artworkUri via FileProvider
+                // para que la tarjeta en quick-settings dropdown y el Dynamic Island
+                // muestren la portada del album (como Spotify).
+                toArtworkUri(s)?.let { metadataBuilder.setArtworkUri(it) }
                 MediaItem.Builder()
                     .setUri(toMediaUri(s.filePath))
                     .setMediaId(s.id.toString())
-                    .setMediaMetadata(
-                        MediaMetadata.Builder().setTitle(s.displayTitle).setArtist(s.displayArtist).build()
-                    ).build()
+                    .setMediaMetadata(metadataBuilder.build())
+                    .build()
             }
             lastRecordedWindow = -1
             val safeIndex = startIndex.coerceIn(0, items.size - 1)

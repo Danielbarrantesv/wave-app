@@ -1,9 +1,14 @@
 package com.mp3tify
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -49,8 +54,29 @@ import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        // #1 enableEdgeToEdge: hace las system bars transparentes Y le dice a Compose
+        // que respete los WindowInsets. Sin esto, el TopAppBar (con iconos de search,
+        // eq, queue) se dibuja DEBAJO de la status bar (donde esta bateria/hora/wifi)
+        // en algunos modelos de celular. Con enableEdgeToEdge, Material 3 Scaffold
+        // + TopAppBar agregan automaticamente el padding superior igual a la altura
+        // de la status bar, y el PlayerBar inferior queda por encima de la navigation
+        // bar (gestural nav).
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         try { PlaybackController.connect(applicationContext) } catch (e: Exception) { e.printStackTrace() }
+
+        // #2 POST_NOTIFICATIONS runtime permission (Android 13+): sin este permiso
+        // concedido en runtime, la MediaStyle notification NO aparece en el quick
+        // settings dropdown ni en el Dynamic Island de Xiaomi, aunque el canal este
+        // creado. Se pide una sola vez; si el usuario la niega, la app funciona pero
+        // sin tarjeta de reproduccion en el dropdown.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1001)
+            }
+        }
+
         val keepScreenOnFlow = Preferences.keepScreenOnFlow
         lifecycleScope.launch {
             keepScreenOnFlow.collect { WakeLockManager.applyKeepScreenOn(this@MainActivity, it) }
