@@ -83,8 +83,11 @@ class MediaPlaybackService : MediaSessionService() {
                 android.util.Log.w("MediaPlaybackService", "onStartCommand: MediaSession player != PlaybackController player, rebuilding session")
                 try { session.release() } catch (_: Exception) {}
                 mediaSession = null
+                // NOTA: usar setFlags() en lugar de `flags = ...` dentro del apply
+                // porque el param `flags: Int` de onStartCommand le hace shadow al
+                // Intent.flags property dentro del lambda.
                 val sessionIntent = Intent(this, MainActivity::class.java).apply {
-                    flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                 }
                 val pendingIntent = PendingIntent.getActivity(
                     this, 0, sessionIntent,
