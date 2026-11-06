@@ -71,10 +71,41 @@ object PlaybackController {
 
     fun connect(context: Context) {
         try {
-            if (player != null) return
+            // CRITICAL FIX (Bug "ya no reproduce después de un rato"): antes este método
+            // hacia `if (player != null) return` sin verificar que el player estuviera
+            // vivo. Si el sistema mataba el ExoPlayer tras un rato de inactividad pero
+            // el singleton conservaba la referencia, connect() salía sin reconectar.
+            // Resultado: el usuario abría Wave, intentaba reproducir, y nada sonaba.
+            // Tenía que desinstalar y reinstalar para que el singleton se recreara.
+            //
+            // Ahora: sondar el player existente con playbackState. Si lanza excepción
+            // (player released), liberar la referencia y reconectar desde cero.
+            val existing = player
+            if (existing != null) {
+                try {
+                    @Suppress("UNUSED_VARIABLE")
+                    val state = existing.playbackState
+                    Log.i("PlaybackController", "connect: existing player is alive (state=$state), reusing")
+                    return  // player sigue vivo, no reconectar
+                } catch (e: Exception) {
+                    Log.w("PlaybackController", "connect: existing player is DEAD, releasing and reconnecting", e)
+                    try { existing.release() } catch (_: Exception) {}
+                    player = null
+                    committedAudioSessionId = 0
+                    // continúa abajo para reconectar
+                }
+            }
             appCtx = context.applicationContext
             try {
                 val serviceIntent = Intent(context.applicationContext, MediaPlaybackService::class.java)
+                // CRITICAL (#2 MediaStyle notification): startService en lugar de
+                // startForegroundService porque Media3 sólo llama startForeground() cuando
+                // hay playback activo. Si usamos startForegroundService y no hay playback
+                // en 5 segundos, Android mata el service con
+                // "Context.startForegroundService() did not then call Service.startForeground()".
+                // Como connect() se llama desde MainActivity.onCreate (foreground), startService
+                // funciona. Media3 promote el service a foreground automáticamente cuando
+                // el player state cambia a playing/buffering con media items.
                 context.applicationContext.startService(serviceIntent)
             } catch (e: Exception) { e.printStackTrace() }
 

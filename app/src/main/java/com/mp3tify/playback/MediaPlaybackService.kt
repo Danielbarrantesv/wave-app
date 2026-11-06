@@ -61,6 +61,48 @@ class MediaPlaybackService : MediaSessionService() {
         }
     }
 
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // CRITICAL (#3 playback resilience): START_STICKY para que el system reintente
+        // el service si lo mata por memory pressure. Sin esto, cuando el system mata
+        // el MediaPlaybackService (tras un rato de inactividad), el service NO se
+        // recrea y el MediaSession desaparece del MediaSessionManager → no hay
+        // notification, no hay Dynamic Island, y la próxima vez que el usuario abre
+        // Wave y le da play, setQueue llama a un player que el system ya liberó.
+        // Con START_STICKY, Android recrea el service (con intent=null) y
+        // onCreate vuelve a conectar el PlaybackController + crear MediaSession.
+        super.onStartCommand(intent, flags, startId)
+        // CRITICAL (#3): si el service ya estaba corriendo (onCreate no se llama de
+        // nuevo) pero PlaybackController reconectó con un player NUEVO (porque el
+        // viejo fue liberado), el MediaSession actual apunta al player muerto.
+        // Detectar esto y reconstruir el session sobre el player vivo.
+        try {
+            val session = mediaSession
+            val sessionPlayer = session?.player
+            val currentControllerPlayer = PlaybackController.playerOrNull()
+            if (sessionPlayer != null && currentControllerPlayer != null && sessionPlayer !== currentControllerPlayer) {
+                android.util.Log.w("MediaPlaybackService", "onStartCommand: MediaSession player != PlaybackController player, rebuilding session")
+                try { session.release() } catch (_: Exception) {}
+                mediaSession = null
+                // NOTA: usar setFlags() en lugar de `flags = ...` dentro del apply
+                // porque el param `flags: Int` de onStartCommand le hace shadow al
+                // Intent.flags property dentro del lambda.
+                val sessionIntent = Intent(this, MainActivity::class.java).apply {
+                    setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                }
+                val pendingIntent = PendingIntent.getActivity(
+                    this, 0, sessionIntent,
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                )
+                mediaSession = MediaSession.Builder(this, currentControllerPlayer)
+                    .setSessionActivity(pendingIntent)
+                    .build()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return START_STICKY
+    }
+
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
         // CRITICAL FIX (botones volante mueren): on every controller connect
         // (car, notification, Assistant), probe the player. If it's released,
