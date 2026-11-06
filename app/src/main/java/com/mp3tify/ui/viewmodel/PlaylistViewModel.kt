@@ -30,6 +30,63 @@ class PlaylistViewModel(
     val importing = MutableStateFlow(false)
     val importProgress = MutableStateFlow(0)
 
+    // Multi-select mode (#1 SelectionBanner en playlist)
+    val selectionMode = MutableStateFlow(false)
+    val selectedIds = MutableStateFlow<Set<Long>>(emptySet())
+
+    fun toggleSelected(songId: Long) {
+        val current = selectedIds.value.toMutableSet()
+        if (!current.add(songId)) current.remove(songId)
+        selectedIds.value = current
+        selectionMode.value = current.isNotEmpty()
+    }
+
+    fun exitSelectionMode() {
+        selectedIds.value = emptySet()
+        selectionMode.value = false
+    }
+
+    /** Reproduce solo las canciones seleccionadas en orden. */
+    fun playSelected() {
+        try {
+            val all = songs.value
+            val list = all.filter { it.id in selectedIds.value }
+            if (list.isNotEmpty()) {
+                PlaybackController.setShuffle(false)
+                PlaybackController.setQueue(list, 0)
+                exitSelectionMode()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    /** Quita las canciones seleccionadas de esta playlist (no las borra de la biblioteca). */
+    fun removeSelectedFromPlaylist() {
+        scope.launch {
+            try {
+                val ids = selectedIds.value.toList()
+                ids.forEach { id -> repo.removeSongFromPlaylist(playlistId, id) }
+                exitSelectionMode()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    /** Elimina las canciones seleccionadas de la biblioteca completa. */
+    fun deleteSelectedFromLibrary() {
+        scope.launch {
+            try {
+                val ids = selectedIds.value.toList()
+                ids.forEach { id -> repo.deleteSongById(id) }
+                exitSelectionMode()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
     fun play(song: Song) {
         try {
             val list = songs.value

@@ -34,6 +34,10 @@ class LibraryViewModel(
     val playlists: StateFlow<List<Playlist>> = repo.playlistsFlow()
         .stateIn(scope, SharingStarted.Lazily, emptyList())
 
+    /** Artistas con sus canciones, para el slider de la sección Artistas (#4). */
+    val artists: StateFlow<List<Repository.ArtistWithSongs>> = repo.observeArtistsWithSongs()
+        .stateIn(scope, SharingStarted.Lazily, emptyList())
+
     val importing = MutableStateFlow(false)
     val importProgress = MutableStateFlow(0)
     val importMessage = MutableStateFlow<String?>(null)
@@ -147,6 +151,23 @@ class LibraryViewModel(
     fun playAll(shuffle: Boolean) {
         try {
             val list = songs.value
+            if (list.isEmpty()) return
+            if (shuffle) {
+                PlaybackController.setShuffle(true)
+                PlaybackController.setQueue(list, (0 until list.size).random())
+            } else {
+                PlaybackController.setShuffle(false)
+                PlaybackController.setQueue(list, 0)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    /** Reproduce todas las canciones del artista dado (#4). */
+    fun playArtist(artist: Repository.ArtistWithSongs, shuffle: Boolean) {
+        try {
+            val list = artist.songs
             if (list.isEmpty()) return
             if (shuffle) {
                 PlaybackController.setShuffle(true)

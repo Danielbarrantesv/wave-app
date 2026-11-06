@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.QueueMusic
@@ -106,6 +107,7 @@ fun LibraryScreen(
     val playbackState by PlaybackController.state.collectAsState()
     val songs by vm.songs.collectAsState()
     val playlists by vm.playlists.collectAsState()
+    val artists by vm.artists.collectAsState()
     val selectionMode by vm.selectionMode.collectAsState()
     val selectedIds by vm.selectedIds.collectAsState()
     val importing by vm.importing.collectAsState()
@@ -253,12 +255,15 @@ fun LibraryScreen(
                             style = MaterialTheme.typography.titleMedium,
                             modifier = Modifier.weight(1f)
                         )
-                        IconButton(onClick = { showNewPlaylistDialog = true }) {
+                        // Botón "+" con texto "Crear lista" (#6)
+                        TextButton(onClick = { showNewPlaylistDialog = true }) {
                             Icon(
                                 Icons.Filled.Add,
-                                contentDescription = t("new_list"),
+                                contentDescription = null,
                                 tint = MaterialTheme.colorScheme.primary
                             )
+                            Spacer(Modifier.width(6.dp))
+                            Text(t("create_list"))
                         }
                     }
                 }
@@ -284,6 +289,57 @@ fun LibraryScreen(
                                 PlaylistCard(
                                     playlist = pl,
                                     onClick = { onOpenPlaylist(pl.id) }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // ===== Sección Artistas (#4) =====
+                // Solo se muestra si hay al menos un artista con MÁS de una canción.
+                // LasArtistCards son virtuales: se generan a partir de las canciones
+                // existentes (no se persisten en la base de datos como playlists).
+                val artistsWithMultiple = artists.filter { it.songs.size > 1 }
+                if (artistsWithMultiple.isNotEmpty()) {
+                    item {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                t("artists_section"),
+                                style = MaterialTheme.typography.titleMedium,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(
+                                tf("artists_count", artistsWithMultiple.size),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    item {
+                        LazyRow(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 4.dp),
+                            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)
+                        ) {
+                            items(artistsWithMultiple, key = { "art_${it.name}" }) { artist ->
+                                ArtistCard(
+                                    artist = artist,
+                                    onClick = {
+                                        // Tap: reproduce todas las canciones del artista
+                                        vm.playArtist(artist, shuffle = false)
+                                        onOpenNowPlaying()
+                                    },
+                                    onShuffleClick = {
+                                        // Botón de shuffle dedicado en la card
+                                        vm.playArtist(artist, shuffle = true)
+                                        onOpenNowPlaying()
+                                    }
                                 )
                             }
                         }
@@ -717,27 +773,28 @@ private fun PlaylistCard(
                 color = MaterialTheme.colorScheme.surfaceVariant,
                 modifier = Modifier.size(120.dp)
             ) {
-                CollageCover(songs = songs, seed = playlist.id, size = 120.dp)
-            }
-            if (isFavorites) {
-                Surface(
-                    shape = androidx.compose.foundation.shape.CircleShape,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(4.dp)
-                        .size(28.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
+                if (isFavorites) {
+                    // CRITICAL (#5 Favoritos): la portada de Favoritos es un corazón
+                    // gigante del tamaño del cuadro, no el collage de discos.
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
                         Icon(
                             Icons.Filled.Favorite,
                             contentDescription = null,
-                            tint = androidx.compose.ui.graphics.Color.Black,
-                            modifier = Modifier.size(18.dp)
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(72.dp)
                         )
                     }
+                } else {
+                    CollageCover(songs = songs, seed = playlist.id, size = 120.dp)
                 }
             }
+            // Pequeño badge corazón en esquina solo si NO es Favoritos (el corazón
+            // gigante ya lo identifica; el badge sería redundante).
+            // Favoritos ya no lleva el badge circular pequeño porque la portada entera
+            // es un corazón.
         }
         Spacer(Modifier.height(6.dp))
         Text(
@@ -964,4 +1021,89 @@ private fun EditSongInfoDialog(
             TextButton(onClick = onDismiss) { Text(t("cancel")) }
         }
     )
+}
+
+/**
+ * ArtistCard — tarjeta horizontal para la sección "Artistas" (#4).
+ *
+ * Mostrar: portada (usa la primera canción con artUri, o fallback icono Person),
+ * nombre del artista, conteo de canciones, y un botón de shuffle overlay.
+ *
+ * Tap en la card: reproduce todas las canciones del artista en orden.
+ * Tap en el botón shuffle (esquina inferior derecha): reproduce aleatorio.
+ */
+@Composable
+private fun ArtistCard(
+    artist: Repository.ArtistWithSongs,
+    onClick: () -> Unit,
+    onShuffleClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .width(120.dp)
+            .clickable { onClick() },
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier.size(120.dp)
+            ) {
+                // Usar la primera canción con portada como imagen; si no, icono Person.
+                val songWithArt = artist.songs.firstOrNull { !it.artUri.isNullOrBlank() }
+                if (songWithArt != null) {
+                    AlbumArt(song = songWithArt, size = 120.dp)
+                } else {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Filled.Person,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(48.dp)
+                        )
+                    }
+                }
+            }
+            // Botón shuffle overlay (esquina inferior derecha)
+            Surface(
+                shape = androidx.compose.foundation.shape.CircleShape,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(6.dp)
+                    .size(32.dp)
+                    .clickable { onShuffleClick() }
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Filled.Shuffle,
+                        contentDescription = t("shuffle"),
+                        tint = androidx.compose.ui.graphics.Color.Black,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            artist.name,
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Text(
+            tf("songs_count", artist.songs.size),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
 }

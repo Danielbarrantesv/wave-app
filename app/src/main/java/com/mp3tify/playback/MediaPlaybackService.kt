@@ -30,6 +30,11 @@ class MediaPlaybackService : MediaSessionService() {
         try {
             createChannel()
             PlaybackController.connect(applicationContext)
+            // #3 Optimización segundo plano: acquire PARTIAL_WAKE_LOCK desde el service
+            // para que el CPU no se duerma durante playback en background, incluso si
+            // la Activity no está visible. Esto previene que el ExoPlayer se congele
+            // tras un rato de uso en background.
+            WakeLockManager.acquirePartialWakeLock(applicationContext)
             val player = PlaybackController.playerOrNull()
             if (player != null) {
                 mediaSession = MediaSession.Builder(this, player).build()
@@ -78,6 +83,8 @@ class MediaPlaybackService : MediaSessionService() {
     override fun onDestroy() {
         try { mediaSession?.release() } catch (e: Exception) { e.printStackTrace() }
         mediaSession = null
+        // #3 Liberar el wakelock al destruir el service para no leakar recursos.
+        try { WakeLockManager.releasePartialWakeLock() } catch (e: Exception) { e.printStackTrace() }
         super.onDestroy()
     }
 

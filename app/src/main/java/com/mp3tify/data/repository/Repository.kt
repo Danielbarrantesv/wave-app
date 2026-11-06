@@ -8,9 +8,11 @@ import com.mp3tify.data.db.Mp3tifyDatabase
 import com.mp3tify.data.model.Playlist
 import com.mp3tify.data.model.PlaylistSong
 import com.mp3tify.data.model.Song
+import com.mp3tify.data.model.displayArtist
 import com.mp3tify.util.Fingerprinter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
@@ -73,6 +75,25 @@ class Repository private constructor(private val context: Context) {
     }
 
     fun observeFavorites(): Flow<List<Song>> = songDao.observeFavorites()
+
+    /**
+     * Observa artistas agrupados a partir de todas las canciones (#4).
+     * Devuelve un Flow de listas ordenadas por nombre de artista (case-insensitive).
+     * Cada entrada es ArtistWithSongs(name, songs).
+     * El UI filtra los que tienen >1 canción para mostrar en el slider de Artistas.
+     */
+    fun observeArtistsWithSongs(): Flow<List<ArtistWithSongs>> = songDao.observeAll().map { allSongs ->
+        allSongs
+            .groupBy { it.displayArtist }
+            .map { (artist, songs) -> ArtistWithSongs(name = artist, songs = songs) }
+            .sortedBy { it.name.lowercase() }
+    }
+
+    /** Data class para el slider de Artistas. */
+    data class ArtistWithSongs(
+        val name: String,
+        val songs: List<Song>
+    )
 
     fun playlistsFlow(): Flow<List<Playlist>> = playlistDao.observeAll()
 
