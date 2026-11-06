@@ -173,6 +173,8 @@ fun LibraryScreen(
             snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
                 // STICKY top bar (Scaffold pins it above the scrolling content).
+                // CRITICAL #1: windowInsets explicitos para garantizar que el TopAppBar
+                // NO se superponga con la status bar (bateria/hora/wifi) en ningun modelo.
                 TopAppBar(
                     title = { Text(t("app_name"), style = MaterialTheme.typography.titleLarge) },
                     actions = {
@@ -191,7 +193,8 @@ fun LibraryScreen(
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.background
-                    )
+                    ),
+                    windowInsets = androidx.compose.foundation.layout.WindowInsets.statusBars
                 )
             },
             bottomBar = {

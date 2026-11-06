@@ -9,6 +9,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -62,6 +63,11 @@ class MainActivity : ComponentActivity() {
         // de la status bar, y el PlayerBar inferior queda por encima de la navigation
         // bar (gestural nav).
         enableEdgeToEdge()
+        // CRITICAL #1: backup explicito por si enableEdgeToEdge no activa bien en
+        // algunos modelos. setDecorFitsSystemWindows(false) hace que el contenido de
+        // la window se extienda bajo las system bars (edge-to-edge real). Sin esto,
+        // los WindowInsets de Compose reportarian (0,0,0,0) y los paddings no aplican.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         super.onCreate(savedInstanceState)
         try { PlaybackController.connect(applicationContext) } catch (e: Exception) { e.printStackTrace() }
 

@@ -8,6 +8,7 @@ import android.os.Build
 import androidx.media3.common.Player
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import androidx.media3.session.DefaultMediaNotificationProvider
 import com.mp3tify.MainActivity
 
 /**
@@ -52,8 +53,19 @@ class MediaPlaybackService : MediaSessionService() {
                     sessionIntent,
                     PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
                 )
+                // CRITICAL #2: setMediaNotificationProvider explicito. Sin esto, en
+                // algunos dispositivos Media3 puede no crear la MediaStyle notification
+                // y por tanto no aparece la tarjeta en el quick settings dropdown ni
+                // el Dynamic Island de Xiaomi. DefaultMediaNotificationProvider es el
+                // provider estandar de Media3 que crea la notification con MediaStyle +
+                // artwork + botones play/pause/next/prev.
+                val notificationProvider = DefaultMediaNotificationProvider.Builder(this)
+                    .setChannelId("mp3tify_playback")
+                    .setChannelName(getString(com.mp3tify.R.string.notification_channel_name))
+                    .build()
                 mediaSession = MediaSession.Builder(this, player)
                     .setSessionActivity(pendingIntent)
+                    .setMediaNotificationProvider(notificationProvider)
                     .build()
             }
         } catch (e: Exception) {
@@ -83,7 +95,7 @@ class MediaPlaybackService : MediaSessionService() {
             PlaybackController.connect(applicationContext)
             val fresh = PlaybackController.playerOrNull()
             if (fresh != null) {
-                // Re-build session with session activity (matching onCreate).
+                // Re-build session with session activity + notification provider (matching onCreate).
                 val sessionIntent = Intent(this, MainActivity::class.java).apply {
                     flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
                 }
@@ -93,8 +105,13 @@ class MediaPlaybackService : MediaSessionService() {
                     sessionIntent,
                     PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
                 )
+                val notificationProvider = DefaultMediaNotificationProvider.Builder(this)
+                    .setChannelId("mp3tify_playback")
+                    .setChannelName(getString(com.mp3tify.R.string.notification_channel_name))
+                    .build()
                 mediaSession = MediaSession.Builder(this, fresh)
                     .setSessionActivity(pendingIntent)
+                    .setMediaNotificationProvider(notificationProvider)
                     .build()
             }
         } catch (e: Exception) {

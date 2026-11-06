@@ -95,7 +95,8 @@ fun SearchScreen(
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background
-                )
+                ),
+                windowInsets = androidx.compose.foundation.layout.WindowInsets.statusBars
             )
         },
         bottomBar = {

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
@@ -40,7 +41,13 @@ fun PlayerBar(
 ) {
     val current = state.playlist.getOrNull(state.currentWindow)
     AnimatedVisibility(visible = current != null) {
-        Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
+        // CRITICAL #1: navigationBarsPadding() empuja el PlayerBar por encima de la
+        // gestural nav bar. Sin esto, en modelos con nav bar de 3 botones o gesture
+        // pill, los botones prev/play/next quedan tapados por la nav bar del sistema.
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            modifier = Modifier.navigationBarsPadding()
+        ) {
             Column {
                 LinearProgressIndicator(
                     progress = {
