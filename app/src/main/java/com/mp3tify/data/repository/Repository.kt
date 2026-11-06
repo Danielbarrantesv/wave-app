@@ -288,6 +288,92 @@ class Repository private constructor(private val context: Context) {
         importFolderInternal(folderUriString, playlistId)
 
     /**
+     * Escanea una carpeta raiz y devuelve las subcarpetas que contienen al menos
+     * un archivo de audio. NO recorre recursivamente (solo hijos directos).
+     *
+     * Usado por el dialog "Crear playlist por subcarpeta": cuando el usuario
+     * selecciona una carpeta con subcarpetas, preguntamos si quiere crear una
+     * playlist por cada subcarpeta con audio.
+     *
+     * @return lista de (subfolderName, subfolderUriString) para subcarpetas con audio
+     */
+    suspend fun findSubfoldersWithAudio(folderUriString: String): List<Pair<String, String>> =
+        withContext(Dispatchers.IO) {
+            val result = mutableListOf<Pair<String, String>>()
+            try {
+                val tree = DocumentFile.fromTreeUri(context, Uri.parse(folderUriString)) ?: return@withContext emptyList()
+                for (child in tree.listFiles()) {
+                    if (child.isDirectory) {
+                        // Verificar si esta subcarpeta tiene al menos un archivo de audio (directo o recursivo)
+                        val hasAudio = mutableListOf<DocumentFile>()
+                        walkTree(child, hasAudio, 0)
+                        if (hasAudio.any { isAudioFile(it) }) {
+                            val name = child.name ?: "Subcarpeta"
+                            result.add(name to child.uri.toString())
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            result
+        }
+
+    /**
+     * Importa una carpeta raiz creando una playlist por cada subcarpeta que tenga audio.
+     * La carpeta raiz tambien se importa a la biblioteca general.
+     *
+     * Cada playlist se llama como la subcarpeta (capitalizada) y contiene las canciones
+     * de esa subcarpeta. Si ya existe una playlist con ese nombre, se le agrega "(2)" etc.
+     *
+     * @param folderUriString URI de la carpeta raiz seleccionada
+     * @param subfolders lista de (name, uri) devuelta por findSubfoldersWithAudio
+     * @return total de canciones agregadas a la biblioteca
+     */
+    suspend fun importFolderWithSubPlaylists(
+        folderUriString: String,
+        subfolders: List<Pair<String, String>>
+    ): Int = withContext(Dispatchers.IO) {
+        var totalAdded = 0
+        try {
+            // 1. Importar toda la carpeta a la biblioteca general (incluye subcarpetas)
+            val rootResult = importFolderInternal(folderUriString, null)
+            totalAdded += rootResult.added
+
+            // 2. Crear una playlist por cada subcarpeta con audio
+            for ((rawName, subUri) in subfolders) {
+                try {
+                    // Capitalizar primera letra
+                    val capitalizedName = if (rawName.isNotEmpty()) {
+                        rawName.substring(0, 1).uppercase() + rawName.substring(1)
+                    } else rawName
+                    // Crear playlist (dedup de nombre: si existe, append (2), (3), etc.)
+                    val uniqueName = ensureUniquePlaylistName(capitalizedName)
+                    val playlistId = createPlaylist(uniqueName, description = "from-folder")
+                    // Importar solo esta subcarpeta a la playlist recien creada
+                    importFolderInternal(subUri, playlistId)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        totalAdded
+    }
+
+    /** Devuelve un nombre de playlist unico. Si "Rock" existe, devuelve "Rock (2)", etc. */
+    private suspend fun ensureUniquePlaylistName(baseName: String): String {
+        var name = baseName
+        var suffix = 2
+        while (playlistDao.getByName(name) != null) {
+            name = "$baseName ($suffix)"
+            suffix++
+        }
+        return name
+    }
+
+    /**
      * Importa URIs individuales (GetMultipleContent) a la library y opcionalmente a un playlist.
      */
     suspend fun importFiles(uris: List<String>, targetPlaylistId: Long? = null): ImportResult =
