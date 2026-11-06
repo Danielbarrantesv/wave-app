@@ -144,6 +144,13 @@ fun LibraryScreen(
         }
     }
 
+    var showAddMusicDialog by remember { mutableStateOf(false) }
+    // #1 Subfolder playlist dialog state — declarar ANTES del pickFolderLauncher
+    // porque el callback del launcher usa estas variables.
+    var showSubfolderDialog by remember { mutableStateOf(false) }
+    var pendingFolderUri by remember { mutableStateOf("") }
+    var pendingSubfolders by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+
     val pickFolderLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
@@ -180,12 +187,6 @@ fun LibraryScreen(
             vm.importFiles(uris.map { it.toString() }) { result -> onImportDone(result) }
         }
     }
-
-    var showAddMusicDialog by remember { mutableStateOf(false) }
-    // #1 Subfolder playlist dialog state
-    var showSubfolderDialog by remember { mutableStateOf(false) }
-    var pendingFolderUri by remember { mutableStateOf("") }
-    var pendingSubfolders by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
 
     Box(Modifier.fillMaxSize()) {
         Scaffold(
