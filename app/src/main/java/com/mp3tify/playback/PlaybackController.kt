@@ -295,35 +295,103 @@ object PlaybackController {
     }
 
     fun setQueue(songs: List<Song>, startIndex: Int) {
-        try {
-            val p = ensureConnected() ?: return
-            if (songs.isEmpty()) return
-            val items = songs.map { s ->
-                val metadataBuilder = MediaMetadata.Builder()
-                    .setTitle(s.displayTitle)
-                    .setArtist(s.displayArtist)
-                    .setAlbumTitle(s.displayAlbum)
-                // #2 MediaStyle notification artwork: artworkUri via FileProvider
-                // para que la tarjeta en quick-settings dropdown y el Dynamic Island
-                // muestren la portada del album (como Spotify).
-                toArtworkUri(s)?.let { metadataBuilder.setArtworkUri(it) }
-                MediaItem.Builder()
-                    .setUri(toMediaUri(s.filePath))
-                    .setMediaId(s.id.toString())
-                    .setMediaMetadata(metadataBuilder.build())
-                    .build()
+        // CRITICAL FIX (app se congela con bibliotecas grandes):
+        // Antes construiamos los MediaItems en el main thread, incluyendo
+        // toArtworkUri() que hace File.exists() por cada cancion (disk I/O).
+        // Para 668 canciones = 668 File.exists() en main thread = ANR.
+        // Ahora: construir MediaItems en IO thread, aplicar en Main thread.
+        _state.value = _state.value.copy(playlist = songs)
+        val safeIndex = startIndex.coerceIn(0, songs.size - 1)
+        lastRecordedWindow = -1
+        // Guardar cola para restaurar despues de process kill (#2 queue persistence)
+        saveQueueToPrefs(songs, safeIndex)
+
+        ioScope.launch {
+            try {
+                val items = songs.map { s ->
+                    val metadataBuilder = MediaMetadata.Builder()
+                        .setTitle(s.displayTitle)
+                        .setArtist(s.displayArtist)
+                        .setAlbumTitle(s.displayAlbum)
+                    // toArtworkUri hace File.exists() — disk I/O pesado con muchas canciones.
+                    // Ahora corre en IO thread.
+                    toArtworkUri(s)?.let { metadataBuilder.setArtworkUri(it) }
+                    MediaItem.Builder()
+                        .setUri(toMediaUri(s.filePath))
+                        .setMediaId(s.id.toString())
+                        .setMediaMetadata(metadataBuilder.build())
+                        .build()
+                }
+                // Volver al main thread para interactuar con ExoPlayer (requiere main thread).
+                withContext(Dispatchers.Main) {
+                    val p = ensureConnected() ?: return@withContext
+                    p.setMediaItems(items, safeIndex, 0L)
+                    p.prepare()
+                    p.play()
+                    refreshState()
+                }
+            } catch (e: Exception) {
+                Log.e("PlaybackController", "setQueue: error building/setting items", e)
+                try { player?.release() } catch (_: Exception) {}
+                player = null
             }
-            lastRecordedWindow = -1
-            val safeIndex = startIndex.coerceIn(0, items.size - 1)
-            p.setMediaItems(items, safeIndex, 0L)
-            _state.value = _state.value.copy(playlist = songs)
-            p.prepare()
-            p.play()
-            refreshState()
+        }
+    }
+
+    /**
+     * Persiste la cola actual (song IDs + index) en SharedPreferences para poder
+     * restaurarla despues de que el process sea killado (call, memory pressure).
+     */
+    private fun saveQueueToPrefs(songs: List<Song>, startIndex: Int) {
+        try {
+            val ctx = appCtx ?: return
+            val prefs = ctx.getSharedPreferences("mp3tify_playback", android.content.Context.MODE_PRIVATE)
+            val ids = songs.joinToString(",") { it.id.toString() }
+            prefs.edit()
+                .putString("queue_song_ids", ids)
+                .putInt("queue_index", startIndex)
+                .putLong("queue_saved_at", System.currentTimeMillis())
+                .apply()
         } catch (e: Exception) {
             e.printStackTrace()
-            try { player?.release() } catch (_: Exception) {}
-            player = null
+        }
+    }
+
+    /**
+     * Restaura la cola guardada desde SharedPreferences. Llamado desde
+     * MainActivity.onCreate para que el usuario pueda resumir la ultima cola
+     * despues de un process kill (call, memory pressure, etc).
+     *
+     * Requiere las canciones de la DB — el caller debe pasar el Repository.
+     */
+    fun restoreSavedQueue(repo: com.mp3tify.data.repository.Repository) {
+        try {
+            val ctx = appCtx ?: return
+            val prefs = ctx.getSharedPreferences("mp3tify_playback", android.content.Context.MODE_PRIVATE)
+            val idsStr = prefs.getString("queue_song_ids", "") ?: return
+            if (idsStr.isBlank()) return
+            val savedIndex = prefs.getInt("queue_index", 0)
+            val ids = idsStr.split(",").mapNotNull { it.toLongOrNull() }
+            if (ids.isEmpty()) return
+            ioScope.launch {
+                try {
+                    val allSongs = repo.allSongs()
+                    val songs = ids.mapNotNull { id -> allSongs.firstOrNull { it.id == id } }
+                    if (songs.isNotEmpty()) {
+                        withContext(Dispatchers.Main) {
+                            val idx = savedIndex.coerceIn(0, songs.size - 1)
+                            setQueue(songs, idx)
+                            // Pausar en vez de reproducir automaticamente (el usuario
+                            // puede reanudar con el boton de play cuando quiera).
+                            try { player?.pause() } catch (_: Exception) {}
+                        }
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 
