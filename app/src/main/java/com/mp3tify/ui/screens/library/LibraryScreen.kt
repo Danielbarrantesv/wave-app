@@ -80,6 +80,7 @@ import com.mp3tify.data.model.Playlist
 import com.mp3tify.data.model.Song
 import com.mp3tify.data.repository.Repository
 import com.mp3tify.playback.PlaybackController
+import com.mp3tify.ui.components.AlbumArt
 import com.mp3tify.ui.components.CollageCover
 import com.mp3tify.ui.components.PlayerBar
 import com.mp3tify.ui.components.ScrollbarLazyColumn
