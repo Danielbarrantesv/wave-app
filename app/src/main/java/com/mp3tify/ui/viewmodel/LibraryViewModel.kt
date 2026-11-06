@@ -63,6 +63,50 @@ class LibraryViewModel(
         sortOrder.value = order
     }
 
+    /**
+     * Escanea una carpeta y devuelve las subcarpetas que contienen audio.
+     * Usado por el dialog "Crear playlist por subcarpeta".
+     */
+    suspend fun findSubfoldersWithAudio(uri: String): List<Pair<String, String>> {
+        return try {
+            repo.findSubfoldersWithAudio(uri)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            emptyList()
+        }
+    }
+
+    /**
+     * Importa una carpeta creando una playlist por cada subcarpeta con audio.
+     * Devuelve el total de canciones agregadas a la biblioteca.
+     */
+    fun importFolderWithSubPlaylists(
+        uri: String,
+        subfolders: List<Pair<String, String>>,
+        onDone: (Int) -> Unit = {}
+    ) {
+        importing.value = true
+        importProgress.value = 0
+        val progressJob = scope.launch {
+            while (importing.value) {
+                if (importProgress.value < 95) importProgress.value += 1
+                kotlinx.coroutines.delay(200)
+            }
+        }
+        scope.launch(Dispatchers.IO) {
+            var totalAdded = 0
+            try {
+                totalAdded = repo.importFolderWithSubPlaylists(uri, subfolders)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            progressJob.cancel()
+            importProgress.value = 100
+            importing.value = false
+            try { onDone(totalAdded) } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
     fun importFromFolder(uri: String, onDone: (Repository.ImportResult?) -> Unit = {}) {
         importing.value = true
         importProgress.value = 0

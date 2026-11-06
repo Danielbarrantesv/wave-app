@@ -29,6 +29,9 @@ class PlaylistViewModel(
     val playlist: StateFlow<Playlist?> = repo.observePlaylist(playlistId)
         .stateIn(scope, SharingStarted.Lazily, null)
 
+    /** Todas las playlists existentes — para el dialog "Add to playlist" del SongRow. */
+    val allPlaylistsFlow: kotlinx.coroutines.flow.Flow<List<Playlist>> = repo.playlistsFlow()
+
     // #3 Sort filter en playlist: 5 opciones (mismas que LibraryScreen).
     val sortOrder = MutableStateFlow(Repository.SortOrder.RECENTLY_ADDED)
 
@@ -72,6 +75,32 @@ class PlaylistViewModel(
     /** Cambia el criterio de orden de las canciones dentro de la playlist (#3). */
     fun setSortOrder(order: Repository.SortOrder) {
         sortOrder.value = order
+    }
+
+    /** Agrega una cancion a otra playlist existente (#2). */
+    fun addSongToExistingPlaylist(targetPlaylistId: Long, songId: Long) {
+        scope.launch {
+            try {
+                repo.addSongsToPlaylist(targetPlaylistId, listOf(songId))
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    /** Crea una playlist nueva con las canciones seleccionadas (#2). */
+    fun createPlaylistFromSelected(name: String, onDone: (Long) -> Unit = {}) {
+        scope.launch {
+            try {
+                val ids = selectedIds.value.toList()
+                val newId = repo.createPlaylist(name)
+                if (ids.isNotEmpty()) repo.addSongsToPlaylist(newId, ids)
+                exitSelectionMode()
+                onDone(newId)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
     }
 
     /** Reproduce solo las canciones seleccionadas en orden. */

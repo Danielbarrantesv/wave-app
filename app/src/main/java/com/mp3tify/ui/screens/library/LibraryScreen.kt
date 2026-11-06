@@ -156,7 +156,20 @@ fun LibraryScreen(
             } catch (e: Exception) {
                 e.printStackTrace()
             }
-            vm.importFromFolder(uri.toString()) { result -> onImportDone(result) }
+            // #1 Subfolder playlist dialog: escanear subcarpetas antes de importar.
+            // Si hay subcarpetas con audio, preguntar si quiere crear una playlist
+            // por cada una. Si no hay subcarpetas o el usuario dice que no, importacion
+            // normal (todo a la biblioteca).
+            scope.launch {
+                val subfolders = vm.findSubfoldersWithAudio(uri.toString())
+                if (subfolders.isNotEmpty()) {
+                    pendingFolderUri = uri.toString()
+                    pendingSubfolders = subfolders
+                    showSubfolderDialog = true
+                } else {
+                    vm.importFromFolder(uri.toString()) { result -> onImportDone(result) }
+                }
+            }
         }
     }
 
@@ -169,6 +182,10 @@ fun LibraryScreen(
     }
 
     var showAddMusicDialog by remember { mutableStateOf(false) }
+    // #1 Subfolder playlist dialog state
+    var showSubfolderDialog by remember { mutableStateOf(false) }
+    var pendingFolderUri by remember { mutableStateOf("") }
+    var pendingSubfolders by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
 
     Box(Modifier.fillMaxSize()) {
         Scaffold(
@@ -520,6 +537,70 @@ fun LibraryScreen(
     }
 
     // ---------------- Dialogs ----------------
+    // #1 Subfolder playlist dialog: se muestra cuando el usuario selecciona una
+    // carpeta con subcarpetas que contienen audio. Pregunta si quiere crear una
+    // playlist por cada subcarpeta (con el nombre de la carpeta capitalizado).
+    if (showSubfolderDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                // Si cierra sin responder, importar normal (sin subplaylists)
+                showSubfolderDialog = false
+                if (pendingFolderUri.isNotBlank()) {
+                    vm.importFromFolder(pendingFolderUri) { result -> onImportDone(result) }
+                }
+                pendingFolderUri = ""
+                pendingSubfolders = emptyList()
+            },
+            title = { Text(t("subfolder_dialog_title")) },
+            text = {
+                Column {
+                    Text(tf("subfolder_dialog_message", pendingSubfolders.size))
+                    Spacer(Modifier.height(12.dp))
+                    // Mostrar nombres de las subcarpetas que se van a convertir en playlists
+                    pendingSubfolders.forEach { (name, _) ->
+                        Text(
+                            "• ${name.replaceFirstChar { it.uppercase() }}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showSubfolderDialog = false
+                    val subs = pendingSubfolders
+                    val folderUri = pendingFolderUri
+                    pendingFolderUri = ""
+                    pendingSubfolders = emptyList()
+                    // Importar creando playlist por subcarpeta
+                    vm.importFolderWithSubPlaylists(folderUri, subs) { total ->
+                        scope.launch {
+                            try {
+                                val msg = if (total > 0) {
+                                    I18n.tf("added_songs", total) + " + ${subs.size} listas"
+                                } else {
+                                    I18n.t("no_music_found")
+                                }
+                                snackbarHostState.showSnackbar(msg)
+                            } catch (e: Exception) { e.printStackTrace() }
+                        }
+                    }
+                }) { Text(t("subfolder_dialog_yes")) }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showSubfolderDialog = false
+                    val folderUri = pendingFolderUri
+                    pendingFolderUri = ""
+                    pendingSubfolders = emptyList()
+                    // Importar normal (sin subplaylists)
+                    vm.importFromFolder(folderUri) { result -> onImportDone(result) }
+                }) { Text(t("subfolder_dialog_no")) }
+            }
+        )
+    }
+
     if (showAddMusicDialog) {
         Dialog(onDismissRequest = { showAddMusicDialog = false }) {
             Surface(

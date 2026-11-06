@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.PlaylistRemove
+import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material3.AlertDialog
@@ -106,6 +107,15 @@ fun PlaylistScreen(
     var showRename by remember { mutableStateOf(false) }
     var showDelete by remember { mutableStateOf(false) }
     var songToDelete by remember { mutableStateOf<Song?>(null) }
+    // #2 State para los dialogs de "Add to playlist" y "Edit info" que ahora sí
+    // funcionan desde el menu de 3 puntos de cada SongRow.
+    var songForAddToPlaylist by remember { mutableStateOf<Song?>(null) }
+    var showAddToPlaylistDialog by remember { mutableStateOf(false) }
+    var songToEdit by remember { mutableStateOf<Song?>(null) }
+    // State para el dialog "Create new playlist from selected" (#2)
+    var showNewPlaylistFromSelectedDialog by remember { mutableStateOf(false) }
+    // State para obtener las playlists existentes (para el dialog Add to playlist)
+    val allPlaylists by remember { vm.allPlaylistsFlow }.collectAsState(initial = emptyList())
 
     val isFavorites = playlist?.name == Repository.FAVORITES_NAME
 
@@ -242,6 +252,8 @@ fun PlaylistScreen(
                                 vm.exitSelectionMode()
                             }
                         },
+                        // #2 NEW: opcion de crear playlist nueva con las seleccionadas
+                        onCreatePlaylistFromSelected = { showNewPlaylistFromSelectedDialog = true },
                         // #4 FIX: el trash icon en una playlist SOLO remueve de la playlist,
                         // NO borra de la biblioteca. Antes llamaba a deleteSelectedFromLibrary
                         // que hacia DELETE FROM songs (la cancion desaparecia de todo el app).
@@ -390,8 +402,13 @@ fun PlaylistScreen(
                                 },
                                 onLongClick = { vm.toggleSelected(song.id) },
                                 onToggleFavorite = { vm.toggleFavorite(song) },
-                                onAddToPlaylist = { },
-                                onEditInfo = { },
+                                // #2 FIX: onAddToPlaylist y onEditInfo estaban vacios ({ }).
+                                // Ahora abren los mismos dialogs que LibraryScreen.
+                                onAddToPlaylist = {
+                                    songForAddToPlaylist = song
+                                    showAddToPlaylistDialog = true
+                                },
+                                onEditInfo = { songToEdit = song },
                                 onDelete = { songToDelete = song }
                             )
                         }
@@ -447,6 +464,144 @@ fun PlaylistScreen(
                 }
             }
         }
+    }
+
+    // #2 Add to playlist dialog — lista todas las playlists existentes para elegir
+    if (showAddToPlaylistDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showAddToPlaylistDialog = false
+                songForAddToPlaylist = null
+            },
+            title = { Text(t("add_to_list")) },
+            text = {
+                Column {
+                    if (allPlaylists.isEmpty()) {
+                        Text(t("no_lists_yet"))
+                    } else {
+                        allPlaylists.forEach { pl ->
+                            TextButton(
+                                onClick = {
+                                    songForAddToPlaylist?.let { song ->
+                                        vm.addSongToExistingPlaylist(pl.id, song.id)
+                                    }
+                                    showAddToPlaylistDialog = false
+                                    songForAddToPlaylist = null
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(pl.name, modifier = Modifier.weight(1f))
+                                Text(
+                                    tf("songs_count", 0),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = {
+                    showAddToPlaylistDialog = false
+                    songForAddToPlaylist = null
+                }) { Text(t("cancel")) }
+            }
+        )
+    }
+
+    // #2 Edit song info dialog
+    songToEdit?.let { song ->
+        var editTitle by remember { mutableStateOf(song.title ?: "") }
+        var editArtist by remember { mutableStateOf(song.artist ?: "") }
+        var editAlbum by remember { mutableStateOf(song.album ?: "") }
+        AlertDialog(
+            onDismissRequest = { songToEdit = null },
+            title = { Text(t("edit_info")) },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = editTitle,
+                        onValueChange = { editTitle = it },
+                        label = { Text(t("title")) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = editArtist,
+                        onValueChange = { editArtist = it },
+                        label = { Text(t("artist")) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = editAlbum,
+                        onValueChange = { editAlbum = it },
+                        label = { Text(t("album")) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch {
+                        try {
+                            Repository.get(context).updateSongInfo(
+                                song.id,
+                                title = editTitle.trim().ifBlank { null },
+                                artist = editArtist.trim().ifBlank { null },
+                                album = editAlbum.trim().ifBlank { null }
+                            )
+                        } catch (e: Exception) { e.printStackTrace() }
+                    }
+                    songToEdit = null
+                }) { Text(t("save")) }
+            },
+            dismissButton = {
+                TextButton(onClick = { songToEdit = null }) { Text(t("cancel")) }
+            }
+        )
+    }
+
+    // #2 Create new playlist from selected songs dialog
+    if (showNewPlaylistFromSelectedDialog) {
+        var newName by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showNewPlaylistFromSelectedDialog = false },
+            title = { Text(tf("create_with_count", selectedIds.size)) },
+            text = {
+                OutlinedTextField(
+                    value = newName,
+                    onValueChange = { newName = it },
+                    label = { Text(t("name")) },
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (newName.isNotBlank()) {
+                            val trimmed = newName.trim()
+                            val capitalized = if (trimmed.isNotEmpty()) {
+                                trimmed.substring(0, 1).uppercase() + trimmed.substring(1)
+                            } else trimmed
+                            vm.createPlaylistFromSelected(capitalized)
+                        }
+                        showNewPlaylistFromSelectedDialog = false
+                    },
+                    enabled = newName.isNotBlank()
+                ) { Text(t("create")) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNewPlaylistFromSelectedDialog = false }) {
+                    Text(t("cancel"))
+                }
+            }
+        )
     }
 
     // Rename dialog
@@ -543,6 +698,7 @@ private fun sortLabel(order: Repository.SortOrder): String = when (order) {
  *  - Count text: "N seleccionadas"
  *  - PlayArrow: reproducir solo las seleccionadas
  *  - Favorite: agregar las seleccionadas a favoritos (si no lo son ya)
+ *  - QueueMusic: crear playlist nueva con las seleccionadas (#2)
  *  - Delete: remueve las seleccionadas de ESTA playlist (NO borra de la
  *    biblioteca — la canción queda en la lista principal). #4
  */
@@ -551,6 +707,7 @@ private fun PlaylistSelectionBanner(
     count: Int,
     onPlaySelected: () -> Unit,
     onAddToFavorites: () -> Unit,
+    onCreatePlaylistFromSelected: () -> Unit,
     onRemoveFromPlaylist: () -> Unit,
     onExit: () -> Unit
 ) {
@@ -586,6 +743,13 @@ private fun PlaylistSelectionBanner(
                     Icons.Filled.Favorite,
                     contentDescription = t("add_to_favorites"),
                     tint = MaterialTheme.colorScheme.primary
+                )
+            }
+            // #2 Crear playlist nueva con las seleccionadas (QueueMusic)
+            IconButton(onClick = onCreatePlaylistFromSelected) {
+                Icon(
+                    Icons.Filled.QueueMusic,
+                    contentDescription = tf("create_with_count", count)
                 )
             }
             // #4 Remover de esta playlist (Delete, error tint).
