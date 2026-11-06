@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -173,6 +175,8 @@ fun LibraryScreen(
             snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
                 // STICKY top bar (Scaffold pins it above the scrolling content).
+                // CRITICAL #1: windowInsets explicitos para garantizar que el TopAppBar
+                // NO se superponga con la status bar (bateria/hora/wifi) en ningun modelo.
                 TopAppBar(
                     title = { Text(t("app_name"), style = MaterialTheme.typography.titleLarge) },
                     actions = {
@@ -191,7 +195,8 @@ fun LibraryScreen(
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.background
-                    )
+                    ),
+                    windowInsets = WindowInsets.statusBars
                 )
             },
             bottomBar = {

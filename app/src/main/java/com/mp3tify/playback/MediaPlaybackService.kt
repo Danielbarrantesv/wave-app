@@ -83,7 +83,7 @@ class MediaPlaybackService : MediaSessionService() {
             PlaybackController.connect(applicationContext)
             val fresh = PlaybackController.playerOrNull()
             if (fresh != null) {
-                // Re-build session with session activity (matching onCreate).
+                // Re-build session with session activity + notification provider (matching onCreate).
                 val sessionIntent = Intent(this, MainActivity::class.java).apply {
                     flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
                 }
