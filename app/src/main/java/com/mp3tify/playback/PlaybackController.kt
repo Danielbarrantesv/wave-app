@@ -199,7 +199,10 @@ object PlaybackController {
         pollJob = mainScope.launch {
             while (isActive) {
                 refreshState()
-                delay(200)
+                // #3 Optimización segundo plano: 500ms en lugar de 200ms reduce CPU/battery
+                // usage durante playback prolongado sin afectar UX visible (la barra de
+                // progreso aún se actualiza 2x por segundo, suficiente para sentir smooth).
+                delay(500)
             }
         }
     }

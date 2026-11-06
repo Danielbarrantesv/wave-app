@@ -4,6 +4,8 @@ import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -17,13 +19,17 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.PlaylistAdd
+import androidx.compose.material.icons.filled.PlaylistRemove
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -88,6 +94,8 @@ fun PlaylistScreen(
     val songs by vm.songs.collectAsState()
     val importing by vm.importing.collectAsState()
     val importProgress by vm.importProgress.collectAsState()
+    val selectionMode by vm.selectionMode.collectAsState()
+    val selectedIds by vm.selectedIds.collectAsState()
 
     var menuOpen by remember { mutableStateOf(false) }
     var showRename by remember { mutableStateOf(false) }
@@ -207,10 +215,37 @@ fun PlaylistScreen(
                 PlayerBar(state = playbackState, onOpenNowPlaying = onOpenNowPlaying)
             }
         ) { padding ->
-            ScrollbarLazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = padding
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding)
             ) {
+                // SelectionBanner fijo arriba (NO scrollea con la lista) — #1
+                if (selectionMode) {
+                    PlaylistSelectionBanner(
+                        count = selectedIds.size,
+                        onPlaySelected = { vm.playSelected() },
+                        onAddToFavorites = {
+                            scope.launch {
+                                selectedIds.toList().forEach { id ->
+                                    try {
+                                        val s = songs.firstOrNull { it.id == id }
+                                        if (s != null && !s.isFavorite) vm.toggleFavorite(s)
+                                    } catch (e: Exception) { e.printStackTrace() }
+                                }
+                                vm.exitSelectionMode()
+                            }
+                        },
+                        onRemoveFromPlaylist = { vm.removeSelectedFromPlaylist() },
+                        onDeleteFromLibrary = { vm.deleteSelectedFromLibrary() },
+                        onExit = { vm.exitSelectionMode() }
+                    )
+                }
+
+                ScrollbarLazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 96.dp)
+                ) {
                 item {
                     Column(
                         Modifier
@@ -280,18 +315,35 @@ fun PlaylistScreen(
                     }
                 } else {
                     items(songs, key = { it.id }) { song ->
-                        SongRow(
-                            song = song,
-                            onClick = {
-                                vm.play(song)
-                                onOpenNowPlaying()
-                            },
-                            onToggleFavorite = { vm.toggleFavorite(song) },
-                            onAddToPlaylist = { },
-                            onEditInfo = { },
-                            onDelete = { songToDelete = song }
-                        )
+                        val isSelected = selectedIds.contains(song.id)
+                        Box(
+                            Modifier.background(
+                                if (isSelected) {
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                } else {
+                                    Color.Transparent
+                                }
+                            )
+                        ) {
+                            SongRow(
+                                song = song,
+                                onClick = {
+                                    if (selectionMode) {
+                                        vm.toggleSelected(song.id)
+                                    } else {
+                                        vm.play(song)
+                                        onOpenNowPlaying()
+                                    }
+                                },
+                                onLongClick = { vm.toggleSelected(song.id) },
+                                onToggleFavorite = { vm.toggleFavorite(song) },
+                                onAddToPlaylist = { },
+                                onEditInfo = { },
+                                onDelete = { songToDelete = song }
+                            )
+                        }
                     }
+                }
                 }
             }
         }
@@ -407,5 +459,75 @@ fun PlaylistScreen(
                 TextButton(onClick = { songToDelete = null }) { Text(t("cancel")) }
             }
         )
+    }
+}
+
+/**
+ * SelectionBanner fijo arriba de PlaylistScreen. Solo iconos (#1).
+ *
+ * Acciones:
+ *  - Close: salir del modo selección
+ *  - Count text: "N seleccionadas"
+ *  - PlayArrow: reproducir solo las seleccionadas
+ *  - Favorite: agregar las seleccionadas a favoritos (si no lo son ya)
+ *  - PlaylistRemove: quitar las seleccionadas de esta playlist
+ *  - Delete: borrar las seleccionadas de la biblioteca completa
+ */
+@Composable
+private fun PlaylistSelectionBanner(
+    count: Int,
+    onPlaySelected: () -> Unit,
+    onAddToFavorites: () -> Unit,
+    onRemoveFromPlaylist: () -> Unit,
+    onDeleteFromLibrary: () -> Unit,
+    onExit: () -> Unit
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.primaryContainer,
+        tonalElevation = 4.dp,
+        shadowElevation = 4.dp,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onExit) {
+                Icon(Icons.Filled.Close, contentDescription = t("cancel"))
+            }
+            Text(
+                tf("selected_count", count),
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                maxLines = 1
+            )
+            // Reproducir seleccionadas
+            IconButton(onClick = onPlaySelected) {
+                Icon(Icons.Filled.PlayArrow, contentDescription = t("play_all"))
+            }
+            // Agregar a favoritos (corazón, accent)
+            IconButton(onClick = onAddToFavorites) {
+                Icon(
+                    Icons.Filled.Favorite,
+                    contentDescription = t("add_to_favorites"),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+            // Quitar de esta playlist (PlaylistRemove)
+            IconButton(onClick = onRemoveFromPlaylist) {
+                Icon(Icons.Filled.PlaylistRemove, contentDescription = t("remove_from_playlist"))
+            }
+            // Borrar de la biblioteca (Delete, error tint)
+            IconButton(onClick = onDeleteFromLibrary) {
+                Icon(
+                    Icons.Filled.Delete,
+                    contentDescription = t("delete_song"),
+                    tint = MaterialTheme.colorScheme.error
+                )
+            }
+        }
     }
 }
