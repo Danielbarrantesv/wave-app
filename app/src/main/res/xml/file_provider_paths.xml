@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Cache path: where album art files are stored (cacheDir/art/*.jpg).
+         Exposed via FileProvider so DefaultMediaNotificationProvider can load
+         artworkUri into the MediaStyle notification + Dynamic Island. -->
+    <cache-path name="art" path="art/" />
+    <!-- Also expose files-path just in case artUri ever points to filesDir. -->
+    <files-path name="internal_art" path="art/" />
+</paths>

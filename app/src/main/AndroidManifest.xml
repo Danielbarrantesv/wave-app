@@ -45,5 +45,19 @@
         <meta-data
             android:name="com.google.android.gms.car.application"
             android:resource="@xml/automotive_app_desc" />
+
+        <!-- FileProvider para exponer las portadas cacheadas (cacheDir/art/*.jpg)
+             como content:// URIs. Necesario para que la MediaStyle notification
+             (DefaultMediaNotificationProvider de Media3) pueda cargar artworkUri
+             en la tarjeta del quick-settings dropdown y el Dynamic Island. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.artwork"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_provider_paths" />
+        </provider>
     </application>
 </manifest>

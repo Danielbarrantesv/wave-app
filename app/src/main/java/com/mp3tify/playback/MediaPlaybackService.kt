@@ -2,11 +2,13 @@ package com.mp3tify.playback
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Intent
 import android.os.Build
 import androidx.media3.common.Player
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import com.mp3tify.MainActivity
 
 /**
  * MediaSessionService — exposes the PlaybackController's ExoPlayer to the system
@@ -37,7 +39,22 @@ class MediaPlaybackService : MediaSessionService() {
             WakeLockManager.acquirePartialWakeLock(applicationContext)
             val player = PlaybackController.playerOrNull()
             if (player != null) {
-                mediaSession = MediaSession.Builder(this, player).build()
+                // #2 MediaStyle notification: set session activity so tapping the
+                // notification card (in quick settings dropdown / Dynamic Island)
+                // opens the app's MainActivity. Without this, tapping the notification
+                // does nothing or opens the system's media control center.
+                val sessionIntent = Intent(this, MainActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                }
+                val pendingIntent = PendingIntent.getActivity(
+                    this,
+                    0,
+                    sessionIntent,
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                )
+                mediaSession = MediaSession.Builder(this, player)
+                    .setSessionActivity(pendingIntent)
+                    .build()
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -66,7 +83,19 @@ class MediaPlaybackService : MediaSessionService() {
             PlaybackController.connect(applicationContext)
             val fresh = PlaybackController.playerOrNull()
             if (fresh != null) {
-                mediaSession = MediaSession.Builder(this, fresh).build()
+                // Re-build session with session activity (matching onCreate).
+                val sessionIntent = Intent(this, MainActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                }
+                val pendingIntent = PendingIntent.getActivity(
+                    this,
+                    0,
+                    sessionIntent,
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                )
+                mediaSession = MediaSession.Builder(this, fresh)
+                    .setSessionActivity(pendingIntent)
+                    .build()
             }
         } catch (e: Exception) {
             e.printStackTrace()
