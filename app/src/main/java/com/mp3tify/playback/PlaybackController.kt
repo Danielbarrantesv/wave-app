@@ -148,7 +148,16 @@ object PlaybackController {
                     _state.value = _state.value.copy(repeatOne = repeatMode == Player.REPEAT_MODE_ONE)
                 }
                 override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                    error.printStackTrace()
+                    Log.e("PlaybackController", "onPlayerError: ${error.message}", error)
+                    // CRITICAL FIX (play button deja de funcionar): antes solo haciamos
+                    // printStackTrace + refreshState. El player quedaba en estado zombie
+                    // (STATE_IDLE con error) y play() no podia recuperarlo porque
+                    // ensureConnected() veia playbackState sin lanzar excepcion.
+                    // Ahora: liberar el player y setear a null para que el proximo
+                    // play() llame a ensureConnected() → connect() → crea player nuevo.
+                    try { player?.release() } catch (_: Exception) {}
+                    player = null
+                    committedAudioSessionId = 0
                     refreshState()
                 }
                 // CRITICAL (Bug EQ no funciona): ExoPlayer lanza este callback cuando
@@ -319,8 +328,21 @@ object PlaybackController {
     }
 
     fun play() {
+        playInternal(retryOnFailure = true)
+    }
+
+    /**
+     * Logica interna de play(). Si retryOnFailure es true y el primer intento falla
+     * (player zombie, STATE_IDLE con media items, o excepcion), libera el player,
+     * reconecta, restaura la cola guardada, y reintenta. Esto previene el bug
+     * "play button deja de funcionar" donde el usuario tenia que reinstalar la app.
+     */
+    private fun playInternal(retryOnFailure: Boolean) {
         try {
-            val p = ensureConnected() ?: return
+            val p = ensureConnected() ?: run {
+                Log.w("PlaybackController", "play: ensureConnected returned null (appCtx=${appCtx != null}, player=${player != null})")
+                return
+            }
             if (p.playbackState == Player.STATE_ENDED || p.playbackState == Player.STATE_IDLE) {
                 if (p.mediaItemCount > 0) {
                     p.prepare()
@@ -329,10 +351,33 @@ object PlaybackController {
             }
             p.play()
             refreshState()
+            // CRITICAL FIX: si despues de play() el player sigue sin reproducir y esta
+            // en STATE_IDLE con media items, esta zombie. Liberar, reconectar, restaurar
+            // la cola, y reintentar.
+            if (!p.isPlaying && p.playbackState == Player.STATE_IDLE && p.mediaItemCount > 0) {
+                Log.w("PlaybackController", "play: player stuck in STATE_IDLE after play(), reconnect + restore queue")
+                val savedQueue = _state.value.playlist
+                val savedIndex = _state.value.currentWindow
+                try { p.release() } catch (_: Exception) {}
+                player = null
+                committedAudioSessionId = 0
+                if (retryOnFailure && savedQueue.isNotEmpty()) {
+                    // Reconnect creates a fresh player. setQueue restores the media
+                    // items and calls play() internally.
+                    Log.i("PlaybackController", "play: retrying with ${savedQueue.size} songs, index=$savedIndex")
+                    setQueue(savedQueue, savedIndex.coerceAtLeast(0))
+                }
+            }
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("PlaybackController", "play: exception, releasing player", e)
+            val savedQueue = _state.value.playlist
+            val savedIndex = _state.value.currentWindow
             try { player?.release() } catch (_: Exception) {}
             player = null
+            if (retryOnFailure && savedQueue.isNotEmpty()) {
+                Log.i("PlaybackController", "play: retrying after exception with ${savedQueue.size} songs")
+                setQueue(savedQueue, savedIndex.coerceAtLeast(0))
+            }
         }
     }
 
