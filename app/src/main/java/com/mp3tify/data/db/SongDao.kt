@@ -40,6 +40,10 @@ interface SongDao {
     )
     fun observeByRecentlyPlayed(): Flow<List<Song>>
 
+    /** Solo canciones que han sido reproducidas al menos una vez, ordenadas por última reproducción DESC. */
+    @Query("SELECT * FROM songs WHERE lastPlayedAt > 0 ORDER BY lastPlayedAt DESC LIMIT :limit")
+    fun observeRecentlyPlayed(limit: Int): Flow<List<Song>>
+
     @Query("SELECT * FROM songs ORDER BY title COLLATE NOCASE ASC")
     fun observeByTitle(): Flow<List<Song>>
 

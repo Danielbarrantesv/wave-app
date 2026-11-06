@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.PlaylistRemove
 import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -96,8 +97,10 @@ fun PlaylistScreen(
     val importProgress by vm.importProgress.collectAsState()
     val selectionMode by vm.selectionMode.collectAsState()
     val selectedIds by vm.selectedIds.collectAsState()
+    val sortOrder by vm.sortOrder.collectAsState()
 
     var menuOpen by remember { mutableStateOf(false) }
+    var sortMenuOpen by remember { mutableStateOf(false) }
     var showRename by remember { mutableStateOf(false) }
     var showDelete by remember { mutableStateOf(false) }
     var songToDelete by remember { mutableStateOf<Song?>(null) }
@@ -290,6 +293,49 @@ fun PlaylistScreen(
                                 Text(t("add_folder"))
                             }
                         }
+                        // #3 Sort filter en playlist: 5 opciones (Añadidas/Reproducidas/Título/Artista/Duración)
+                        if (songs.isNotEmpty()) {
+                            Spacer(Modifier.height(8.dp))
+                            Box {
+                                TextButton(onClick = { sortMenuOpen = true }) {
+                                    Icon(
+                                        Icons.Filled.Sort,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        sortLabel(sortOrder),
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = sortMenuOpen,
+                                    onDismissRequest = { sortMenuOpen = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text(t("sort_recently_added")) },
+                                        onClick = { vm.setSortOrder(Repository.SortOrder.RECENTLY_ADDED); sortMenuOpen = false }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(t("sort_recently_played")) },
+                                        onClick = { vm.setSortOrder(Repository.SortOrder.RECENTLY_PLAYED); sortMenuOpen = false }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(t("sort_title")) },
+                                        onClick = { vm.setSortOrder(Repository.SortOrder.TITLE); sortMenuOpen = false }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(t("sort_artist")) },
+                                        onClick = { vm.setSortOrder(Repository.SortOrder.ARTIST); sortMenuOpen = false }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(t("sort_duration")) },
+                                        onClick = { vm.setSortOrder(Repository.SortOrder.DURATION); sortMenuOpen = false }
+                                    )
+                                }
+                            }
+                        }
                         if (playlist?.folderUri != null) {
                             Spacer(Modifier.height(4.dp))
                             Text(
@@ -460,6 +506,19 @@ fun PlaylistScreen(
             }
         )
     }
+}
+
+/**
+ * #3 Sort label para el dropdown de orden en PlaylistScreen.
+ * Mismas 5 opciones que LibraryScreen.
+ */
+@Composable
+private fun sortLabel(order: Repository.SortOrder): String = when (order) {
+    Repository.SortOrder.RECENTLY_ADDED -> t("sort_recently_added")
+    Repository.SortOrder.RECENTLY_PLAYED -> t("sort_recently_played")
+    Repository.SortOrder.TITLE -> t("sort_title")
+    Repository.SortOrder.ARTIST -> t("sort_artist")
+    Repository.SortOrder.DURATION -> t("sort_duration")
 }
 
 /**

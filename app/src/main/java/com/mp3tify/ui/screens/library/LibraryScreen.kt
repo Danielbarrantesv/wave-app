@@ -28,6 +28,8 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DriveEta
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Person
@@ -78,6 +80,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.documentfile.provider.DocumentFile
 import com.mp3tify.data.model.Playlist
 import com.mp3tify.data.model.Song
+import com.mp3tify.data.model.displayArtist
+import com.mp3tify.data.model.displayTitle
 import com.mp3tify.data.repository.Repository
 import com.mp3tify.playback.PlaybackController
 import com.mp3tify.ui.components.AlbumArt
@@ -109,6 +113,7 @@ fun LibraryScreen(
     val songs by vm.songs.collectAsState()
     val playlists by vm.playlists.collectAsState()
     val artists by vm.artists.collectAsState()
+    val recentlyPlayed by vm.recentlyPlayed.collectAsState()
     val selectionMode by vm.selectionMode.collectAsState()
     val selectedIds by vm.selectedIds.collectAsState()
     val importing by vm.importing.collectAsState()
@@ -121,6 +126,9 @@ fun LibraryScreen(
     var songToEdit by remember { mutableStateOf<Song?>(null) }
     var songToDelete by remember { mutableStateOf<Song?>(null) }
     var sortMenuOpen by remember { mutableStateOf(false) }
+    // #1 Limpiar pagina principal: la lista completa de canciones esta colapsada
+    // por defecto. Tap en el header la expande/colapsa.
+    var libraryExpanded by remember { mutableStateOf(false) }
 
     fun onImportDone(result: Repository.ImportResult?) {
         scope.launch {
@@ -237,11 +245,73 @@ fun LibraryScreen(
                     contentPadding = PaddingValues(bottom = 96.dp)
                 ) {
                 item {
-                    CollageHeader(
+                    // #2 Header horizontal: portada IZQ + titulo + count DER + chevron
+                    // #1 Tap expande/colapsa la lista completa de canciones para limpiar la home.
+                    LibraryHeaderRow(
                         songs = songs,
+                        expanded = libraryExpanded,
+                        onToggleExpanded = { libraryExpanded = !libraryExpanded },
                         onPlayAll = { vm.playAll(false) },
-                        onShuffleAll = { vm.playAll(true) }
+                        onShuffleAll = { vm.playAll(true) },
+                        onSortClick = { sortMenuOpen = true },
+                        sortLabel = sortLabel(sortOrder)
                     )
+                    DropdownMenu(
+                        expanded = sortMenuOpen,
+                        onDismissRequest = { sortMenuOpen = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(t("sort_recently_added")) },
+                            onClick = { vm.setSortOrder(Repository.SortOrder.RECENTLY_ADDED); sortMenuOpen = false }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(t("sort_recently_played")) },
+                            onClick = { vm.setSortOrder(Repository.SortOrder.RECENTLY_PLAYED); sortMenuOpen = false }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(t("sort_title")) },
+                            onClick = { vm.setSortOrder(Repository.SortOrder.TITLE); sortMenuOpen = false }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(t("sort_artist")) },
+                            onClick = { vm.setSortOrder(Repository.SortOrder.ARTIST); sortMenuOpen = false }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(t("sort_duration")) },
+                            onClick = { vm.setSortOrder(Repository.SortOrder.DURATION); sortMenuOpen = false }
+                        )
+                    }
+                }
+
+                // ===== Sección Escuchadas recientemente (#4) =====
+                // Solo se muestra si hay al menos una canción reproducida (lastPlayedAt > 0).
+                // Slider horizontal con las últimas 20 canciones reproducidas.
+                if (recentlyPlayed.isNotEmpty()) {
+                    item {
+                        Text(
+                            t("recently_played_section"),
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
+                    item {
+                        LazyRow(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 4.dp),
+                            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)
+                        ) {
+                            items(recentlyPlayed, key = { "rp_${it.id}" }) { song ->
+                                RecentlyPlayedCard(
+                                    song = song,
+                                    onClick = {
+                                        vm.play(song)
+                                        onOpenNowPlaying()
+                                    }
+                                )
+                            }
+                        }
+                    }
                 }
 
                 item {
@@ -347,102 +417,38 @@ fun LibraryScreen(
                     }
                 }
 
-                item {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(t("library_title"), style = MaterialTheme.typography.titleMedium)
-                            Text(
-                                tf("songs_count", songs.size),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                // #1 La lista completa de canciones solo se muestra si el usuario
+                // expandió la biblioteca (tap en el header). Por defecto colapsada
+                // para limpiar la home: solo header + escuchadas recientemente +
+                // tus listas + artistas.
+                if (libraryExpanded) {
+                    if (songs.isEmpty()) {
+                        item {
+                            EmptyStateCard(onAddMusic = { showAddMusicDialog = true })
                         }
-                        Box {
-                            TextButton(onClick = { sortMenuOpen = true }) {
-                                Icon(
-                                    Icons.Filled.Sort,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                                Spacer(Modifier.width(4.dp))
-                                Text(sortLabel(sortOrder), style = MaterialTheme.typography.bodySmall)
-                            }
-                            DropdownMenu(
-                                expanded = sortMenuOpen,
-                                onDismissRequest = { sortMenuOpen = false }
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text(t("sort_recently_added")) },
-                                    onClick = {
-                                        vm.setSortOrder(Repository.SortOrder.RECENTLY_ADDED)
-                                        sortMenuOpen = false
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(t("sort_recently_played")) },
-                                    onClick = {
-                                        vm.setSortOrder(Repository.SortOrder.RECENTLY_PLAYED)
-                                        sortMenuOpen = false
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(t("sort_title")) },
-                                    onClick = {
-                                        vm.setSortOrder(Repository.SortOrder.TITLE)
-                                        sortMenuOpen = false
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(t("sort_artist")) },
-                                    onClick = {
-                                        vm.setSortOrder(Repository.SortOrder.ARTIST)
-                                        sortMenuOpen = false
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(t("sort_duration")) },
-                                    onClick = {
-                                        vm.setSortOrder(Repository.SortOrder.DURATION)
-                                        sortMenuOpen = false
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-
-                if (songs.isEmpty()) {
-                    item {
-                        EmptyStateCard(onAddMusic = { showAddMusicDialog = true })
-                    }
-                } else {
-                    items(songs, key = { it.id }) { song ->
-                        val isSelected = selectedIds.contains(song.id)
-                        Box(
-                            Modifier.background(
-                                if (isSelected) {
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                                } else {
-                                    Color.Transparent
-                                }
-                            )
-                        ) {
-                            SongRow(
-                                song = song,
-                                onClick = {
-                                    if (selectionMode) {
-                                        vm.toggleSelected(song.id)
+                    } else {
+                        items(songs, key = { it.id }) { song ->
+                            val isSelected = selectedIds.contains(song.id)
+                            Box(
+                                Modifier.background(
+                                    if (isSelected) {
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
                                     } else {
-                                        vm.play(song)
-                                        onOpenNowPlaying()
+                                        Color.Transparent
                                     }
-                                },
-                                onLongClick = { vm.toggleSelected(song.id) },
+                                )
+                            ) {
+                                SongRow(
+                                    song = song,
+                                    onClick = {
+                                        if (selectionMode) {
+                                            vm.toggleSelected(song.id)
+                                        } else {
+                                            vm.play(song)
+                                            onOpenNowPlaying()
+                                        }
+                                    },
+                                    onLongClick = { vm.toggleSelected(song.id) },
                                 onToggleFavorite = { vm.toggleFavorite(song) },
                                 onAddToPlaylist = {
                                     songForAddToPlaylist = song
@@ -454,6 +460,7 @@ fun LibraryScreen(
                         }
                     }
                 }
+                } // closes if (libraryExpanded)
             }
                 } // closes Column added for fixed SelectionBanner
         }
@@ -696,6 +703,152 @@ private fun SelectionBanner(
                 )
             }
         }
+    }
+}
+
+/**
+ * #2 LibraryHeaderRow — header horizontal de la biblioteca.
+ *
+ * Layout:
+ *   [CollageCover 72dp IZQ] | [Tu biblioteca + count + sort chip + Play/Shuffle DER] | [Chevron]
+ *
+ * Tap en toda la fila expande/colapsa la lista completa de canciones (#1).
+ * Sort chip abre el menú de orden (5 opciones: Recently Added, Recently Played,
+ * Title, Artist, Duration).
+ */
+@Composable
+private fun LibraryHeaderRow(
+    songs: List<Song>,
+    expanded: Boolean,
+    onToggleExpanded: () -> Unit,
+    onPlayAll: () -> Unit,
+    onShuffleAll: () -> Unit,
+    onSortClick: () -> Unit,
+    sortLabel: String
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 2.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .clickable { onToggleExpanded() }
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Portada collage IZQ (72dp)
+            CollageCover(songs = songs, seed = 42L, size = 72.dp)
+
+            Spacer(Modifier.width(12.dp))
+
+            // Centro: titulo + count + sort chip + botones play/shuffle
+            Column(Modifier.weight(1f)) {
+                Text(
+                    t("your_library"),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    tf("songs_count", songs.size),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(6.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Sort chip (tap abre menú)
+                    Box {
+                        TextButton(
+                            onClick = onSortClick,
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                        ) {
+                            Icon(
+                                Icons.Filled.Sort,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                sortLabel,
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    // Play all (icon button)
+                    IconButton(
+                        onClick = onPlayAll,
+                        enabled = songs.isNotEmpty(),
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.PlayArrow,
+                            contentDescription = t("play_all"),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    // Shuffle (icon button)
+                    IconButton(
+                        onClick = onShuffleAll,
+                        enabled = songs.isNotEmpty(),
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.Shuffle,
+                            contentDescription = t("shuffle"),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+
+            // Chevron DER (indica expandible)
+            Icon(
+                if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+/**
+ * RecentlyPlayedCard — tarjeta horizontal compacta para "Escuchadas recientemente".
+ * Muestra portada 56dp + titulo + artista. Tap reproduce.
+ */
+@Composable
+private fun RecentlyPlayedCard(
+    song: Song,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .width(112.dp)
+            .clickable { onClick() },
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        AlbumArt(song = song, size = 112.dp)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            song.displayTitle,
+            style = MaterialTheme.typography.bodySmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Text(
+            song.displayArtist,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 
