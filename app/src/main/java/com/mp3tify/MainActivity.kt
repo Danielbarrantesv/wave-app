@@ -90,6 +90,22 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // CRITICAL (v2.5.6 anti-hibernacion): la hibernacion de Android ("Pausar
+        // actividad en la app si no se usa") REVOCa los permisos. Sin READ_MEDIA_AUDIO
+        // (o READ_EXTERNAL_STORAGE en Android 12-), ExoPlayer no puede leer los
+        // archivos de audio y NADA reproduce — el bug "ya no reproduce nada despues
+        // de un rato". Re-verificar en cada arranque y re-solicitar si fue revocado.
+        val mediaPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Manifest.permission.READ_MEDIA_AUDIO
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+        if (ContextCompat.checkSelfPermission(this, mediaPermission)
+            != PackageManager.PERMISSION_GRANTED) {
+            android.util.Log.w("MainActivity", "Media permission was revoked (app hibernation?), re-requesting: $mediaPermission")
+            requestPermissions(arrayOf(mediaPermission), 1002)
+        }
+
         val keepScreenOnFlow = Preferences.keepScreenOnFlow
         lifecycleScope.launch {
             keepScreenOnFlow.collect { WakeLockManager.applyKeepScreenOn(this@MainActivity, it) }

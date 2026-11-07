@@ -9,6 +9,9 @@ import coil.memory.MemoryCache
 import com.mp3tify.data.db.Mp3tifyDatabase
 import com.mp3tify.data.repository.Repository
 import com.mp3tify.util.Preferences
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class MP3tifyApp : Application(), ImageLoaderFactory {
 
@@ -35,6 +38,24 @@ class MP3tifyApp : Application(), ImageLoaderFactory {
         // Equalizer: store app context so it can generate a fresh audio session id.
         try {
             com.mp3tify.equalizer.EqualizerManager.init(this)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        // CRITICAL (v2.5.6 anti-hibernacion): migrar portadas de cacheDir (borrable
+        // por "Pausar actividad en la app si no se usa" de Android) a filesDir
+        // (persistente). One-shot con marca en mp3tify_meta.
+        try {
+            val meta = getSharedPreferences("mp3tify_meta", Context.MODE_PRIVATE)
+            if (!meta.getBoolean("art_migrated_to_filesdir", false)) {
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        Repository.get(this@MP3tifyApp).migrateArtToFilesDir()
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                    meta.edit().putBoolean("art_migrated_to_filesdir", true).apply()
+                }
+            }
         } catch (e: Exception) {
             e.printStackTrace()
         }

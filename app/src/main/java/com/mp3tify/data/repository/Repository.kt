@@ -241,6 +241,60 @@ class Repository private constructor(private val context: Context) {
         }
     }
 
+    /**
+     * Migracion one-time (v2.5.6): mueve las portadas existentes de cacheDir/art
+     * (borrable por la hibernacion de apps sin uso de Android y por limpieza de
+     * storage) a filesDir/art (persistente). Tambien actualiza los artUri de la DB
+     * que apuntaban a la ubicacion vieja.
+     *
+     * La hibernacion de Android ("Pausar actividad en la app si no se usa") borra
+     * los archivos temporales = cacheDir completo = portadas desaparecidas. Con
+     * filesDir, las portadas sobreviven a la hibernacion.
+     *
+     * Se llama desde MP3tifyApp.onCreate una sola vez (marca en mp3tify_meta).
+     */
+    suspend fun migrateArtToFilesDir() {
+        try {
+            val oldDir = File(context.cacheDir, "art")
+            val newDir = File(context.filesDir, "art")
+            if (!oldDir.exists() || oldDir.listFiles().isNullOrEmpty()) return
+            if (!newDir.exists()) newDir.mkdirs()
+
+            // 1. Copiar archivos que existan en la ubicacion vieja a la nueva
+            val nameToNewPath = mutableMapOf<String, String>()
+            oldDir.listFiles()?.forEach { file ->
+                try {
+                    val target = File(newDir, file.name)
+                    if (!target.exists()) {
+                        file.copyTo(target, overwrite = false)
+                    }
+                    nameToNewPath[file.name] = target.absolutePath
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+
+            // 2. Actualizar artUri en la DB para las canciones que apuntaban a cacheDir
+            val songs = songDao.listAll()
+            val oldPrefix = oldDir.absolutePath
+            songs.forEach { song ->
+                try {
+                    val artUri = song.artUri ?: return@forEach
+                    if (artUri.startsWith(oldPrefix)) {
+                        val fileName = artUri.removePrefix("$oldPrefix/")
+                        val newPath = nameToNewPath[fileName]
+                            ?: File(newDir, fileName).absolutePath
+                        songDao.updateSongPaths(song.id, song.filePath, newPath)
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     suspend fun ensureDefaultPlaylists() {
         try {
             if (playlistDao.getByName(FAVORITES_NAME) == null) {
@@ -266,6 +320,7 @@ class Repository private constructor(private val context: Context) {
             playlistDao.deleteAllExcept(FAVORITES_NAME)
             ensureDefaultPlaylists()
             try { File(context.cacheDir, "art").listFiles()?.forEach { it.delete() } } catch (e: Exception) {}
+            try { File(context.filesDir, "art").listFiles()?.forEach { it.delete() } } catch (e: Exception) {}
             try { File(context.cacheDir, "lyrics").listFiles()?.forEach { it.delete() } } catch (e: Exception) {}
             try { com.mp3tify.ui.components.AlbumArtCache.clear() } catch (e: Exception) {}
         } catch (e: Exception) { e.printStackTrace() }
@@ -387,7 +442,12 @@ class Repository private constructor(private val context: Context) {
                 val knownMeta = existing.map {
                     "${(it.title ?: "").lowercase()}|${(it.artist ?: "").lowercase()}|${it.durationMs / 2000}"
                 }.toHashSet()
-                val artDir = File(context.cacheDir, "art"); if (!artDir.exists()) artDir.mkdirs()
+                // CRITICAL FIX (portadas borradas por hibernacion de Android): mover el cache
+                    // de portadas de cacheDir (borrable por el sistema: "borrar archivos
+                    // temporales" de la hibernacion de apps sin uso, o limpieza por
+                    // storage bajo) a filesDir (persistente, solo se borra al desinstalar
+                    // o con "borrar datos"). Asi las portadas sobreviven.
+                    val artDir = File(context.filesDir, "art"); if (!artDir.exists()) artDir.mkdirs()
                 for (uriStr in uris) {
                     try {
                         val df = DocumentFile.fromSingleUri(context, Uri.parse(uriStr)) ?: continue
@@ -437,7 +497,12 @@ class Repository private constructor(private val context: Context) {
                         "${(it.title ?: "").lowercase()}|${(it.artist ?: "").lowercase()}|${it.durationMs / 2000}"
                     }.toHashSet()
                     val knownFps = existing.mapNotNull { it.fingerprint }.toHashSet()
-                    val artDir = File(context.cacheDir, "art"); if (!artDir.exists()) artDir.mkdirs()
+                    // CRITICAL FIX (portadas borradas por hibernacion de Android): mover el cache
+                    // de portadas de cacheDir (borrable por el sistema: "borrar archivos
+                    // temporales" de la hibernacion de apps sin uso, o limpieza por
+                    // storage bajo) a filesDir (persistente, solo se borra al desinstalar
+                    // o con "borrar datos"). Asi las portadas sobreviven.
+                    val artDir = File(context.filesDir, "art"); if (!artDir.exists()) artDir.mkdirs()
                     for (df in audio) {
                         try {
                             val uriStr = df.uri.toString(); val fileName = df.name ?: uriStr; val fileSize = df.length()
