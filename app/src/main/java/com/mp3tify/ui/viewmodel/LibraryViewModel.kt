@@ -31,8 +31,9 @@ class LibraryViewModel(
     val favorites: StateFlow<List<Song>> = repo.observeFavorites()
         .stateIn(scope, SharingStarted.Lazily, emptyList())
 
-    /** Canciones escuchadas recientemente (limit 20) — para la sección "Escuchadas recientemente" en home. */
-    val recentlyPlayed: StateFlow<List<Song>> = repo.observeRecentlyPlayed(20)
+    /** Canciones escuchadas recientemente (limit 15) — para la sección "Escuchadas recientemente" en home.
+     *  Limitado a 15 para no acumular mucha memoria y evitar que la app pegue con bibliotecas grandes. */
+    val recentlyPlayed: StateFlow<List<Song>> = repo.observeRecentlyPlayed(15)
         .stateIn(scope, SharingStarted.Lazily, emptyList())
 
     val playlists: StateFlow<List<Playlist>> = repo.playlistsFlow()
