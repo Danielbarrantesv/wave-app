@@ -78,4 +78,10 @@ interface PlaylistDao {
 
     @Query("DELETE FROM playlists WHERE name != :keepName")
     suspend fun deleteAllExcept(keepName: String)
+
+    // CRITICAL (v2.5.13 UI): retorna los IDs de playlists que contienen la canción
+    // dada. Usado por LibraryScreen para marcar visualmente (borde + ▷) las
+    // playlists que están sonando actualmente.
+    @Query("SELECT DISTINCT playlistId FROM playlist_songs WHERE songId = :songId")
+    suspend fun playlistIdsForSong(songId: Long): List<Long>
 }

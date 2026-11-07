@@ -8,6 +8,7 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import com.mp3tify.data.model.Song
@@ -65,6 +66,16 @@ object PlaybackController {
      */
     @Volatile
     private var committedAudioSessionId: Int = 0
+
+    /**
+     * CRITICAL FIX (loop infinito tras restart): cuando onPlayerError recibe un
+     * error permanente (IO/permission/decoding), seteamos esta flag. playInternal
+     * la consulta antes de reintentar — si es true, salta a la siguiente canción o
+     * detiene en lugar de re-apply del queue (que solo reproduciría el mismo error).
+     * Se resetea al cambiar de canción exitosamente (onMediaItemTransition).
+     */
+    @Volatile
+    private var lastErrorWasPermanent: Boolean = false
 
     /** Exposes the shared player to MediaPlaybackService (MediaSession). */
     fun playerOrNull(): Player? = player
@@ -139,6 +150,12 @@ object PlaybackController {
                 override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                     refreshState()
                     maybeRecordPlay()
+                    // CRITICAL FIX (loop infinito): resetear la flag de error permanente
+                    // al cambiar de canción — la nueva canción puede ser accesible.
+                    if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO ||
+                        reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK) {
+                        lastErrorWasPermanent = false
+                    }
                 }
                 override fun onPlaybackStateChanged(playbackState: Int) { refreshState() }
                 override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
@@ -147,8 +164,27 @@ object PlaybackController {
                 override fun onRepeatModeChanged(repeatMode: Int) {
                     _state.value = _state.value.copy(repeatOne = repeatMode == Player.REPEAT_MODE_ONE)
                 }
-                override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                    Log.e("PlaybackController", "onPlayerError: ${error.message}", error)
+                override fun onPlayerError(error: PlaybackException) {
+                    // CRITICAL FIX (loop infinito tras restart): clasificar el error
+                    // por errorCode. Los IO/permission/decoding son permanentes — no
+                    // van a desaparecer reintenteando. Marcar la flag para que
+                    // playInternal no reintente con setQueue (eso solo reproduciría el
+                    // mismo SecurityException infinitamente, como se ve en el log
+                    // "player empty but state has 2 songs → re-apply" disparándose 4
+                    // veces en 2 segundos).
+                    lastErrorWasPermanent = when (error.errorCode) {
+                        PlaybackException.ERROR_CODE_IO_UNSPECIFIED,
+                        PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND,
+                        PlaybackException.ERROR_CODE_IO_PERMISSION_DENIED,
+                        PlaybackException.ERROR_CODE_IO_INVALID_HTTP_CONTENT_TYPE,
+                        PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS,
+                        PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
+                        PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED,
+                        PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+                        PlaybackException.ERROR_CODE_DECODING_FAILED -> true
+                        else -> false
+                    }
+                    Log.e("PlaybackController", "onPlayerError: code=${error.errorCodeNameString} permanent=$lastErrorWasPermanent message=${error.message}", error)
                     // CRITICAL FIX (play button deja de funcionar): antes solo haciamos
                     // printStackTrace + refreshState. El player quedaba en estado zombie
                     // (STATE_IDLE con error) y play() no podia recuperarlo porque
@@ -363,6 +399,15 @@ object PlaybackController {
      * despues de un process kill (call, memory pressure, etc).
      *
      * Requiere las canciones de la DB — el caller debe pasar el Repository.
+     *
+     * CRITICAL FIX (SecurityException tras restart): antes de pasar las canciones
+     * al ExoPlayer, validamos que cada URI sea accesible. Tras un process kill,
+     * los URIs content:// del SAF pueden perder el persistable permission (raro
+     * pero posible en Android 14 — el sistema poda persistable permissions si el
+     * granting package se actualiza, o si la app fue reinstalada sin restaurar
+     * los tree URIs via BackupUriManager.restoreTreeUris). Pasar un URI muerto
+     * al ExoPlayer dispara onPlayerError con ERROR_CODE_IO_UNSPECIFIED, que a su
+     * vez dispara el loop de retry en playInternal. Filtramos aquí los caídos.
      */
     fun restoreSavedQueue(repo: com.mp3tify.data.repository.Repository) {
         try {
@@ -377,14 +422,34 @@ object PlaybackController {
                 try {
                     val allSongs = repo.allSongs()
                     val songs = ids.mapNotNull { id -> allSongs.firstOrNull { it.id == id } }
-                    if (songs.isNotEmpty()) {
-                        withContext(Dispatchers.Main) {
-                            val idx = savedIndex.coerceIn(0, songs.size - 1)
-                            setQueue(songs, idx)
-                            // Pausar en vez de reproducir automaticamente (el usuario
-                            // puede reanudar con el boton de play cuando quiera).
-                            try { player?.pause() } catch (_: Exception) {}
-                        }
+                    if (songs.isEmpty()) {
+                        // Las canciones ya no existen en la DB — limpiar prefs.
+                        prefs.edit().remove("queue_song_ids").remove("queue_index").apply()
+                        return@launch
+                    }
+                    // CRITICAL FIX: filtrar canciones cuyo filePath ya no es accesible.
+                    // isUriAccessible abre un InputStream y lee 1 byte — fuerza el
+                    // check real de permission contra el ContentProvider.
+                    val accessible = songs.filter { isUriAccessible(ctx, it.filePath) }
+                    val dropped = songs.size - accessible.size
+                    if (dropped > 0) {
+                        Log.w("PlaybackController", "restoreSavedQueue: dropped $dropped inaccessible song(s) out of ${songs.size}")
+                    }
+                    if (accessible.isEmpty()) {
+                        // Ninguna canción es accesible — limpiar prefs para no reintentar.
+                        Log.w("PlaybackController", "restoreSavedQueue: all songs inaccessible, clearing saved queue")
+                        prefs.edit().remove("queue_song_ids").remove("queue_index").apply()
+                        _state.value = _state.value.copy(playlist = emptyList(), currentWindow = -1)
+                        return@launch
+                    }
+                    // Ajustar el savedIndex si las canciones anteriores al índice fueron caídas.
+                    val droppedBeforeIdx = songs.subList(0, savedIndex.coerceIn(0, songs.size)).count { !isUriAccessible(ctx, it.filePath) }
+                    val adjustedIndex = (savedIndex - droppedBeforeIdx).coerceIn(0, accessible.size - 1)
+                    withContext(Dispatchers.Main) {
+                        setQueue(accessible, adjustedIndex)
+                        // Pausar en vez de reproducir automaticamente (el usuario
+                        // puede reanudar con el boton de play cuando quiera).
+                        try { player?.pause() } catch (_: Exception) {}
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()
@@ -392,6 +457,41 @@ object PlaybackController {
             }
         } catch (e: Exception) {
             e.printStackTrace()
+        }
+    }
+
+    /**
+     * CRITICAL FIX (loop infinito tras restart): valida si un filePath (que puede
+     * ser un content:// URI del SAF, un file:// URI, o un path absoluto) es
+     * realmente accesible desde el proceso actual. Abre un InputStream y lee 1
+     * byte para forzar el SecurityException si el persistable permission se perdió.
+     *
+     * No cachear resultado por mucho tiempo — el permission puede cambiar entre
+     * el check y el uso (raro pero posible).
+     */
+    private fun isUriAccessible(context: Context, path: String): Boolean {
+        if (path.isBlank()) return false
+        return try {
+            if (path.startsWith("content://") || path.startsWith("file://")) {
+                val uri = android.net.Uri.parse(path)
+                context.contentResolver.openInputStream(uri)?.use { stream ->
+                    // Leer 1 byte para forzar el check real de permission.
+                    // Si el URI requiere FLAG_GRANT_READ_URI_PERMISSION y no lo
+                    // tenemos, openInputStream lanza SecurityException aquí mismo.
+                    stream.read()
+                    true
+                } ?: false
+            } else {
+                // Path absoluto en filesystem (de MediaStore.Audio.Media.DATA).
+                val f = File(path)
+                f.exists() && f.canRead()
+            }
+        } catch (e: SecurityException) {
+            Log.w("PlaybackController", "isUriAccessible: SecurityException for $path")
+            false
+        } catch (e: Exception) {
+            Log.w("PlaybackController", "isUriAccessible: ${e.javaClass.simpleName} for $path: ${e.message}")
+            false
         }
     }
 
@@ -404,8 +504,34 @@ object PlaybackController {
      * (player zombie, STATE_IDLE con media items, o excepcion), libera el player,
      * reconecta, restaura la cola guardada, y reintenta. Esto previene el bug
      * "play button deja de funcionar" donde el usuario tenia que reinstalar la app.
+     *
+     * CRITICAL FIX (loop infinito tras restart): si onPlayerError marcó
+     * lastErrorWasPermanent=true (SecurityException/IO/decoding), NO reintenteamos —
+     * el archivo está inaccesible y reintentar solo dispara el mismo error. En su
+     * lugar, avanzamos a la siguiente canción o detenemos. Esto rompe el loop
+     * "player empty → re-apply → onPlayerError → player empty → ..." visible en el
+     * log de v2.5.11 (4 intentos en ~2 segundos).
      */
     private fun playInternal(retryOnFailure: Boolean) {
+        // CRITICAL FIX (loop infinito): si el último error fue permanente, saltar
+        // a la siguiente canción accesible o detener.
+        if (lastErrorWasPermanent) {
+            Log.w("PlaybackController", "play: skipping — last error was permanent (errorCode set flag)")
+            val pl = _state.value.playlist
+            val idx = _state.value.currentWindow
+            if (pl.isNotEmpty() && idx >= 0 && idx < pl.size) {
+                Log.w("PlaybackController", "play: song at index $idx is inaccessible (${pl[idx].fileName}), skipping to next")
+                if (_state.value.hasNext) {
+                    // Reset flag para la siguiente canción y avanzar.
+                    lastErrorWasPermanent = false
+                    skipToNext()
+                } else {
+                    // No hay siguiente — detener y limpiar la cola fallida.
+                    stop()
+                }
+            }
+            return
+        }
         try {
             val p = ensureConnected() ?: run {
                 Log.w("PlaybackController", "play: ensureConnected returned null (appCtx=${appCtx != null}, player=${player != null})")
@@ -421,7 +547,8 @@ object PlaybackController {
             refreshState()
             // CRITICAL FIX: si despues de play() el player sigue sin reproducir y esta
             // en STATE_IDLE con media items, esta zombie. Liberar, reconectar, restaurar
-            // la cola, y reintentar.
+            // la cola, y reintentar — PERO solo si el último error NO fue permanente
+            // (si fue permanente, ya salimos arriba con skipToNext/stop).
             if (!p.isPlaying && p.playbackState == Player.STATE_IDLE && p.mediaItemCount > 0) {
                 Log.w("PlaybackController", "play: player stuck in STATE_IDLE after play(), reconnect + restore queue")
                 val savedQueue = _state.value.playlist
@@ -429,7 +556,7 @@ object PlaybackController {
                 try { p.release() } catch (_: Exception) {}
                 player = null
                 committedAudioSessionId = 0
-                if (retryOnFailure && savedQueue.isNotEmpty()) {
+                if (retryOnFailure && savedQueue.isNotEmpty() && !lastErrorWasPermanent) {
                     // Reconnect creates a fresh player. setQueue restores the media
                     // items and calls play() internally.
                     Log.i("PlaybackController", "play: retrying with ${savedQueue.size} songs, index=$savedIndex")
@@ -442,7 +569,7 @@ object PlaybackController {
             val savedIndex = _state.value.currentWindow
             try { player?.release() } catch (_: Exception) {}
             player = null
-            if (retryOnFailure && savedQueue.isNotEmpty()) {
+            if (retryOnFailure && savedQueue.isNotEmpty() && !lastErrorWasPermanent) {
                 Log.i("PlaybackController", "play: retrying after exception with ${savedQueue.size} songs")
                 setQueue(savedQueue, savedIndex.coerceAtLeast(0))
             }

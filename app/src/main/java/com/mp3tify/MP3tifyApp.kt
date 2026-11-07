@@ -59,6 +59,27 @@ class MP3tifyApp : Application(), ImageLoaderFactory {
         } catch (e: Exception) {
             e.printStackTrace()
         }
+        // CRITICAL FIX (v2.5.12 SecurityException tras restart): restaurar los
+        // tree URI permissions persistidos por BackupUriManager. Android 14 puede
+        // perder los persistable URI permissions si el granting package
+        // (com.android.externalstorage) se actualiza, o si el sistema hizo pruneo
+        // de urigrants.xml, o si la app fue reinstalada sin restaurar las
+        // SharedPreferences de BackupUriManager. Sin esto, los filePaths guardados
+        // como content://com.android.externalstorage.documents/... quedan muertos
+        // y al primer setQueue ExoPlayer dispara ERROR_CODE_IO_UNSPECIFIED que a
+        // su vez dispara el loop de re-apply en playInternal.
+        // restoreTreeUris ya está implementado en BackupUriManager.kt — solo
+        // faltaba invocarlo desde aquí.
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val restored = com.mp3tify.backup.BackupUriManager.restoreTreeUris(this@MP3tifyApp)
+                if (restored.isNotEmpty()) {
+                    android.util.Log.i("MP3tifyApp", "Restored ${restored.size} tree URI permission(s) from BackupUriManager")
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
     }
 
     private fun oneShotDbReset() {

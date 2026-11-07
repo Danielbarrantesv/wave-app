@@ -4,6 +4,7 @@ import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -67,6 +68,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -124,6 +126,31 @@ fun LibraryScreen(
     val importing by vm.importing.collectAsState()
     val importProgress by vm.importProgress.collectAsState()
     val sortOrder by vm.sortOrder.collectAsState()
+
+    // CRITICAL (v2.5.13 UI): canción actualmente sonando + IDs de playlists que la
+    // contienen. Se recalcula cuando cambia el currentSong (LaunchedEffect corre en
+    // IO via Repository.playlistIdsForSong, query SQL simple).
+    val currentSong = playbackState.playlist.getOrNull(playbackState.currentWindow)
+    var playingPlaylistIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    val repo = remember { Repository.get(context) }
+    LaunchedEffect(currentSong?.id) {
+        playingPlaylistIds = if (currentSong != null) {
+            try { repo.playlistIdsForSong(currentSong.id).toSet() } catch (e: Exception) { emptySet() }
+        } else {
+            emptySet()
+        }
+    }
+
+    // CRITICAL (v2.5.13 UI): Favoritos SIEMPRE primero, luego el resto por
+    // updatedAt DESC (orden original del DAO). Sin este sort, si el usuario crea
+    // o edita una playlist, Favoritos baja de la primera posición porque su
+    // updatedAt es viejo.
+    val sortedPlaylists = remember(playlists) {
+        playlists.sortedWith(
+            compareByDescending<Playlist> { it.name == Repository.FAVORITES_NAME }
+                .thenByDescending { it.updatedAt }
+        )
+    }
 
     var showNewPlaylistDialog by remember { mutableStateOf(false) }
     var showAddToPlaylistDialog by remember { mutableStateOf(false) }
@@ -227,7 +254,10 @@ fun LibraryScreen(
                 ExtendedFloatingActionButton(
                     onClick = { showAddMusicDialog = true },
                     icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                    text = { Text(t("add_music")) },
+                    // CRITICAL (v2.5.13 UI): texto compacto "+ Música" en lugar de
+                    // "Agregar música" para que el FAB ocupe menos espacio en
+                    // pantallas pequeñas y sea más rápido de leer.
+                    text = { Text(t("add_music_short")) },
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = Color.Black
                 )
@@ -381,6 +411,8 @@ fun LibraryScreen(
                         // resto requería scroll horizontal). Ahora grid 2 columnas
                         // con altura maxima 280dp (muestra ~2 filas) y scroll vertical
                         // si hay mas de 4 playlists.
+                        // CRITICAL (v2.5.13 UI): usa sortedPlaylists (Favoritos primero)
+                        // en lugar de playlists (orden crudo del DAO por updatedAt DESC).
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -388,7 +420,7 @@ fun LibraryScreen(
                                 .verticalScroll(rememberScrollState())
                                 .padding(horizontal = 12.dp, vertical = 4.dp)
                         ) {
-                            playlists.chunked(2).forEach { pair ->
+                            sortedPlaylists.chunked(2).forEach { pair ->
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)
@@ -396,6 +428,10 @@ fun LibraryScreen(
                                     pair.forEach { pl ->
                                         PlaylistCard(
                                             playlist = pl,
+                                            // CRITICAL (v2.5.13 UI): marcar si esta
+                                            // playlist contiene la canción actualmente
+                                            // sonando (borde + ▷ + color primario).
+                                            isPlaying = playingPlaylistIds.contains(pl.id),
                                             onClick = { onOpenPlaylist(pl.id) }
                                         )
                                     }
@@ -1013,7 +1049,11 @@ private fun CollageHeader(
 @Composable
 private fun PlaylistCard(
     playlist: Playlist,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    // CRITICAL (v2.5.13 UI): true si esta playlist contiene la canción actualmente
+    // sonando. Aplica borde 2px en la portada + ▷ delante del nombre + nombre en
+    // color primario para indicar visualmente qué playlist(s) está(n) sonando.
+    isPlaying: Boolean = false
 ) {
     val context = LocalContext.current
     val playlistRepo = remember { Repository.get(context) }
@@ -1033,7 +1073,18 @@ private fun PlaylistCard(
             Surface(
                 shape = RoundedCornerShape(12.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant,
-                modifier = Modifier.size(120.dp)
+                // CRITICAL (v2.5.13 UI): borde de 2dp del color primario cuando esta
+                // playlist está sonando. Aplica al Surface que contiene la portada
+                // (favoritos con corazón, o collage de discos).
+                modifier = Modifier
+                    .size(120.dp)
+                    .then(
+                        if (isPlaying) Modifier.border(
+                            width = 2.dp,
+                            color = MaterialTheme.colorScheme.primary,
+                            shape = RoundedCornerShape(12.dp)
+                        ) else Modifier
+                    )
             ) {
                 if (isFavorites) {
                     // CRITICAL (#5 Favoritos): la portada de Favoritos es un corazón
@@ -1059,14 +1110,34 @@ private fun PlaylistCard(
             // es un corazón.
         }
         Spacer(Modifier.height(6.dp))
-        Text(
-            playlist.name,
-            style = MaterialTheme.typography.bodyMedium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth()
-        )
+        // CRITICAL (v2.5.13 UI): si isPlaying, anteponer ▷ al nombre y pintar el
+        // texto en color primario. El ▷ es U+25B7 (geometric shape WHITE RIGHT-
+        // POINTING TRIANGLE) — se renderiza bien en todas las fuentes.
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (isPlaying) {
+                Text(
+                    "\u25B7",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontSize = androidx.compose.ui.unit.TextUnit(10f, androidx.compose.ui.unit.TextUnitType.Sp)
+                )
+                Spacer(Modifier.width(2.dp))
+            }
+            Text(
+                playlist.name,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+                color = if (isPlaying) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurface,
+                fontWeight = if (isPlaying) FontWeight.Bold else FontWeight.Normal
+            )
+        }
         Text(
             tf("songs_count", songs.size),
             style = MaterialTheme.typography.bodySmall,
