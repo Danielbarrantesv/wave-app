@@ -16,8 +16,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -373,17 +376,35 @@ fun LibraryScreen(
                     }
                 } else {
                     item {
-                        LazyRow(
+                        // #2 Playlists en grid vertical de 2 columnas con scroll.
+                        // Antes era LazyRow horizontal (solo se veian 3-4 cards y el
+                        // resto requería scroll horizontal). Ahora grid 2 columnas
+                        // con altura maxima 280dp (muestra ~2 filas) y scroll vertical
+                        // si hay mas de 4 playlists.
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 4.dp),
-                            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)
+                                .heightIn(max = 300.dp)
+                                .verticalScroll(rememberScrollState())
+                                .padding(horizontal = 12.dp, vertical = 4.dp)
                         ) {
-                            items(playlists, key = { "pl_${it.id}" }) { pl ->
-                                PlaylistCard(
-                                    playlist = pl,
-                                    onClick = { onOpenPlaylist(pl.id) }
-                                )
+                            playlists.chunked(2).forEach { pair ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)
+                                ) {
+                                    pair.forEach { pl ->
+                                        PlaylistCard(
+                                            playlist = pl,
+                                            onClick = { onOpenPlaylist(pl.id) }
+                                        )
+                                    }
+                                    // Si es impar, agregar spacer para mantener alineacion
+                                    if (pair.size == 1) {
+                                        Spacer(Modifier.width(120.dp))
+                                    }
+                                }
+                                Spacer(Modifier.height(12.dp))
                             }
                         }
                     }

@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -101,6 +102,9 @@ fun SettingsScreen(
     var accentMenuOpen by remember { mutableStateOf(false) }
     var langMenuOpen by remember { mutableStateOf(false) }
     var showWipeDialog by remember { mutableStateOf(false) }
+    // #4 Log de errores: dialog que muestra el path del archivo generado
+    var showLogDialog by remember { mutableStateOf(false) }
+    var logFilePath by remember { mutableStateOf<String?>(null) }
     var wipeDoneMessage by remember { mutableStateOf<String?>(null) }
     var isRestoring by remember { mutableStateOf(false) }
     var restoreProgress by remember { mutableStateOf(0) }
@@ -427,11 +431,30 @@ fun SettingsScreen(
             Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                 Text("Wave", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "${t("about_version")} 2.4.0",
+                    "${t("about_version")} 2.5.4",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Daniel Barrantes Villarevia",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Hecho con el poderoso Z.ai GLM-5.2",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Medium
+                )
             }
+            // #4 Botón para generar log de errores
+            ActionRow(
+                label = t("generate_error_log"),
+                icon = Icons.Filled.BugReport,
+                onClick = { showLogDialog = true }
+            )
         }
 
         if (isRestoring) {
@@ -571,6 +594,111 @@ fun SettingsScreen(
                 confirmButton = { TextButton(onClick = { wipeDoneMessage = null }) { Text(t("ok")) } }
             )
         }
+
+        // #4 Log de errores: dialog que genera un archivo con los logs de la app
+        if (showLogDialog) {
+            AlertDialog(
+                onDismissRequest = { showLogDialog = false },
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.BugReport, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(t("generate_error_log"))
+                    }
+                },
+                text = {
+                    Column {
+                        Text(t("error_log_desc"), style = MaterialTheme.typography.bodyMedium)
+                        if (logFilePath != null) {
+                            Spacer(Modifier.height(12.dp))
+                            Text(
+                                t("error_log_path") + ":",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                logFilePath!!,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        scope.launch(Dispatchers.IO) {
+                            try {
+                                val log = generateErrorLog(context)
+                                withContext(Dispatchers.Main) {
+                                    logFilePath = log
+                                }
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                                withContext(Dispatchers.Main) {
+                                    logFilePath = "Error: ${e.message}"
+                                }
+                            }
+                        }
+                    }) { Text(t("error_log_generate")) }
+                },
+                dismissButton = { TextButton(onClick = { showLogDialog = false }) { Text(t("close")) } }
+            )
+        }
+    }
+}
+
+/**
+ * Genera un archivo de log con los errores de la app. Captura logcat filtrado
+ * por los tags relevantes (PlaybackController, EqualizerManager, MediaPlaybackService,
+ * AndroidRuntime) y lo guarda en cacheDir/wave_error_log_<timestamp>.txt.
+ *
+ * El archivo se puede compartir via el intent de compartir archivos.
+ */
+private suspend fun generateErrorLog(context: android.content.Context): String {
+    return withContext(Dispatchers.IO) {
+        val timestamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())
+        val logFile = java.io.File(context.cacheDir, "wave_error_log_$timestamp.txt")
+        val tags = listOf(
+            "PlaybackController",
+            "EqualizerManager",
+            "MediaPlaybackService",
+            "AndroidRuntime",
+            "System.err",
+            "Wave"
+        )
+        val logBuilder = StringBuilder()
+        logBuilder.appendLine("=== Wave Error Log ===")
+        logBuilder.appendLine("Version: 2.5.4")
+        logBuilder.appendLine("Date: ${java.util.Date()}")
+        logBuilder.appendLine("Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
+        logBuilder.appendLine("Android: ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})")
+        logBuilder.appendLine()
+        logBuilder.appendLine("=== Logs ===")
+        logBuilder.appendLine()
+        try {
+            // Capturar logcat via Runtime.exec
+            val pid = android.os.Process.myPid()
+            val command = mutableListOf("logcat", "-d", "--pid=$pid")
+            // Filtrar por tags relevantes
+            for (tag in tags) {
+                command.add("$tag:*")
+            }
+            command.add("*:S")  // silenciar todo lo demas
+            val process = Runtime.getRuntime().exec(command.toTypedArray())
+            val reader = java.io.BufferedReader(java.io.InputStreamReader(process.inputStream))
+            var line: String?
+            while (reader.readLine().also { line = it } != null) {
+                logBuilder.appendLine(line)
+            }
+            reader.close()
+            process.destroy()
+        } catch (e: Exception) {
+            logBuilder.appendLine("Error capturing logcat: ${e.message}")
+        }
+        logBuilder.appendLine()
+        logBuilder.appendLine("=== End of Log ===")
+        logFile.writeText(logBuilder.toString())
+        logFile.absolutePath
     }
 }
 
