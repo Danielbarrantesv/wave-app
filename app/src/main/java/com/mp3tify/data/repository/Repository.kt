@@ -117,6 +117,15 @@ class Repository private constructor(private val context: Context) {
     suspend fun playlistEntries(playlistId: Long): List<PlaylistSong> =
         try { playlistDao.getEntries(playlistId) } catch (e: Exception) { emptyList() }
 
+    // CRITICAL (v2.5.13 UI): retorna los IDs de playlists que contienen la canción
+    // dada. Usado por LibraryScreen para marcar visualmente (borde + ▷) las
+    // playlists que están sonando actualmente. Si songId <= 0, retorna lista vacía.
+    suspend fun playlistIdsForSong(songId: Long): List<Long> =
+        try {
+            if (songId <= 0L) emptyList()
+            else playlistDao.playlistIdsForSong(songId)
+        } catch (e: Exception) { emptyList() }
+
     suspend fun insertSong(song: Song): Long =
         try { songDao.insert(song) } catch (e: Exception) { -1L }
 

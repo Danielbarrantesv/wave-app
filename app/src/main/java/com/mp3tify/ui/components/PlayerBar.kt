@@ -20,11 +20,15 @@ import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
@@ -33,13 +37,34 @@ import com.mp3tify.playback.PlaybackController
 import com.mp3tify.playback.PlaybackState
 import com.mp3tify.ui.t
 
-/** Mini player bar: cover + title/artist + prev/play/next + thin progress line. */
+/**
+ * Mini player bar: cover + title/artist + prev/play/next + seek slider.
+ *
+ * CRITICAL (v2.5.13 UI): la barra de progreso delgada (LinearProgressIndicator de
+ * 2dp) fue reemplazada por un Slider Material 3 con thumb visible siempre, para
+ * que el usuario pueda arrastrar y hacer seek sin tener que abrir la pantalla
+ * Now Playing. Mientras arrastra, seekPosition != null y el Slider usa ese valor
+ * local en lugar del calculado desde PlaybackState (evita jitter mientras el
+ * seek no se hace efectivo).
+ */
 @Composable
 fun PlayerBar(
     state: PlaybackState,
     onOpenNowPlaying: () -> Unit
 ) {
     val current = state.playlist.getOrNull(state.currentWindow)
+
+    // CRITICAL (v2.5.13 UI): seekPosition local. null = no está arrastrando,
+    // usa el progreso real del PlaybackState. != null = está arrastrando,
+    // usa el valor local para evitar jitter mientras seekTo se hace efectivo.
+    var seekPosition by remember { mutableStateOf<Float?>(null) }
+    val progress = if (state.durationMs > 0) {
+        (state.positionMs.toFloat() / state.durationMs).coerceIn(0f, 1f)
+    } else {
+        0f
+    }
+    val sliderValue = seekPosition ?: progress
+
     AnimatedVisibility(visible = current != null) {
         // CRITICAL #1: navigationBarsPadding() empuja el PlayerBar por encima de la
         // gestural nav bar. Sin esto, en modelos con nav bar de 3 botones o gesture
@@ -49,19 +74,43 @@ fun PlayerBar(
             modifier = Modifier.navigationBarsPadding()
         ) {
             Column {
-                LinearProgressIndicator(
-                    progress = {
+                // CRITICAL (v2.5.13 UI): Slider con thumb visible siempre.
+                // El Slider Material 3 muestra el thumb automáticamente cuando es
+                // interactiva (cuando el valor puede cambiar). El usuario arrastra
+                // el thumb para hacer seek; onValueChangeFinished hace seekTo al
+                // soltar. Height más grande (8dp en el track) para que el thumb
+                // (típicamente 12-16dp) no quede tapado.
+                // NOTA: Slider ocupa toda la fila, así que el padding horizontal
+                // ya está aplicado por el modifier.
+                Slider(
+                    value = sliderValue,
+                    onValueChange = { newValue ->
+                        // Solo permitir seek si la duración es conocida (>0).
                         if (state.durationMs > 0) {
-                            (state.positionMs.toFloat() / state.durationMs).coerceIn(0f, 1f)
-                        } else {
-                            0f
+                            seekPosition = newValue
                         }
                     },
+                    onValueChangeFinished = {
+                        // Al soltar el thumb: hacer seekTo y limpiar el state local.
+                        seekPosition?.let { pos ->
+                            val targetMs = (pos * state.durationMs).toLong()
+                            try { PlaybackController.seekTo(targetMs) } catch (e: Exception) { e.printStackTrace() }
+                        }
+                        seekPosition = null
+                    },
+                    valueRange = 0f..1f,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(2.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = MaterialTheme.colorScheme.outline
+                        .height(12.dp)
+                        .padding(horizontal = 6.dp),
+                    // Color del thumb y track: primary para lo "filled", outline para el resto.
+                    // Material 3 Slider usa estos colores por defecto; los explicitamos
+                    // para que el thumb sea visible del color primario.
+                    colors = androidx.compose.material3.SliderDefaults.colors(
+                        thumbColor = MaterialTheme.colorScheme.primary,
+                        activeTrackColor = MaterialTheme.colorScheme.primary,
+                        inactiveTrackColor = MaterialTheme.colorScheme.outline
+                    )
                 )
                 Row(
                     modifier = Modifier
