@@ -146,7 +146,24 @@ class MediaPlaybackService : MediaSessionService() {
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        try { PlaybackController.stop() } catch (e: Exception) { e.printStackTrace() }
+        // CRITICAL FIX (v2.5.12): NO llamar a PlaybackController.stop() aquí —
+        // stop() hace _state.value = PlaybackState() que borra la playlist in-memory.
+        // Tras swipe-out, el usuario espera que al reabrir la app la cola siga ahí
+        // (las canciones se persisten en mp3tify_playback/queue_song_ids desde
+        // setQueue/refreshState, y restoreSavedQueue las recarga desde la DB).
+        // Antes: stop() vaciaba el estado → MainActivity.onCreate llamaba
+        // restoreSavedQueue que intentaba setQueue con URIs SAF que habían perdido
+        // el persistable permission → SecurityException → onPlayerError → loop
+        // infinito de re-apply (4 intents en 2 segundos, log v2.5.11).
+        // Ahora: solo pausar y limpiar media items del player (la cola en prefs
+        // sigue siendo la fuente de truth para el próximo arranque).
+        try {
+            val p = PlaybackController.playerOrNull()
+            if (p != null) {
+                p.pause()
+                p.clearMediaItems()
+            }
+        } catch (e: Exception) { e.printStackTrace() }
         stopSelf()
         super.onTaskRemoved(rootIntent)
     }
