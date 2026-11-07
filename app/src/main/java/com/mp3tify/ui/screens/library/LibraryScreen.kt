@@ -405,42 +405,26 @@ fun LibraryScreen(
                         )
                     }
                 } else {
+                    // CRITICAL (v2.5.14 UI): el usuario pidió que las listas salgan
+                    // como un slider horizontal (carrusel deslizable), no como grid
+                    // vertical de 2 columnas. Volvemos a LazyRow — cada PlaylistCard
+                    // se muestra una al lado de la otra, scroll horizontal para ver
+                    // más. Favoritos queda primero (sortedPlaylists) y el marcado de
+                    // playlist sonando (isPlaying) se mantiene.
                     item {
-                        // #2 Playlists en grid vertical de 2 columnas con scroll.
-                        // Antes era LazyRow horizontal (solo se veian 3-4 cards y el
-                        // resto requería scroll horizontal). Ahora grid 2 columnas
-                        // con altura maxima 280dp (muestra ~2 filas) y scroll vertical
-                        // si hay mas de 4 playlists.
-                        // CRITICAL (v2.5.13 UI): usa sortedPlaylists (Favoritos primero)
-                        // en lugar de playlists (orden crudo del DAO por updatedAt DESC).
-                        Column(
+                        LazyRow(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .heightIn(max = 300.dp)
-                                .verticalScroll(rememberScrollState())
-                                .padding(horizontal = 12.dp, vertical = 4.dp)
+                                .padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp)
                         ) {
-                            sortedPlaylists.chunked(2).forEach { pair ->
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)
-                                ) {
-                                    pair.forEach { pl ->
-                                        PlaylistCard(
-                                            playlist = pl,
-                                            // CRITICAL (v2.5.13 UI): marcar si esta
-                                            // playlist contiene la canción actualmente
-                                            // sonando (borde + ▷ + color primario).
-                                            isPlaying = playingPlaylistIds.contains(pl.id),
-                                            onClick = { onOpenPlaylist(pl.id) }
-                                        )
-                                    }
-                                    // Si es impar, agregar spacer para mantener alineacion
-                                    if (pair.size == 1) {
-                                        Spacer(Modifier.width(120.dp))
-                                    }
-                                }
-                                Spacer(Modifier.height(12.dp))
+                            items(sortedPlaylists) { pl ->
+                                PlaylistCard(
+                                    playlist = pl,
+                                    isPlaying = playingPlaylistIds.contains(pl.id),
+                                    onClick = { onOpenPlaylist(pl.id) }
+                                )
                             }
                         }
                     }
