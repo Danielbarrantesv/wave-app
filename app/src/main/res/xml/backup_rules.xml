@@ -24,9 +24,13 @@
     <include domain="database" path="." />
     <!-- Incluir SharedPreferences (wave_uri_backup, mp3tify_meta, etc.) -->
     <include domain="sharedpref" path="." />
-    <!-- Incluir el cache de portadas (art/) y lyrics (lyrics/) — se regeneran -->
+    <!-- Incluir el cache de portadas y lyrics — se regeneran -->
     <include domain="cache" path="art/" />
     <include domain="cache" path="lyrics/" />
+    <!-- CRITICAL (v2.5.6 anti-hibernacion): portadas persistentes en filesDir/art.
+         La hibernacion de Android ("Pausar actividad si no se usa") borra cacheDir
+         pero NO filesDir. Incluir en el backup para que sobrevivan reinstalaciones. -->
+    <include domain="file" path="art/" />
     <!-- Excluir el cache de imagenes de Coil (se regenera solo) -->
     <exclude domain="cache" path="image_cache/" />
 </full-backup-content>

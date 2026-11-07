@@ -433,7 +433,7 @@ fun SettingsScreen(
             Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                 Text("Wave", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "${t("about_version")} 2.5.4",
+                    "${t("about_version")} 2.5.6",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -670,7 +670,7 @@ private suspend fun generateErrorLog(context: android.content.Context): String {
         )
         val logBuilder = StringBuilder()
         logBuilder.appendLine("=== Wave Error Log ===")
-        logBuilder.appendLine("Version: 2.5.4")
+        logBuilder.appendLine("Version: 2.5.6")
         logBuilder.appendLine("Date: ${java.util.Date()}")
         logBuilder.appendLine("Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
         logBuilder.appendLine("Android: ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})")
