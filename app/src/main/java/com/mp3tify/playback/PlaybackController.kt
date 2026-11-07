@@ -447,10 +447,17 @@ object PlaybackController {
                         Log.w("PlaybackController", "restoreSavedQueue: dropped $dropped inaccessible song(s) out of ${songs.size}")
                     }
                     if (accessible.isEmpty()) {
-                        // Ninguna canción es accesible — limpiar prefs para no reintentar.
-                        Log.w("PlaybackController", "restoreSavedQueue: all songs inaccessible, clearing saved queue")
-                        prefs.edit().remove("queue_song_ids").remove("queue_index").apply()
-                        _state.value = _state.value.copy(playlist = emptyList(), currentWindow = -1)
+                        // CRITICAL FIX (v2.5.14): antes limpiabamos los prefs si todas las
+                        // canciones eran inaccesibles. Eso hacia que al reabrir la app, la
+                        // cola estuviera vacía y el play no respondiera — el usuario perdía
+                        // su cola sin poder reintentar.
+                        //
+                        // Ahora NO limpiamos los prefs. Solo logeamos warning. El usuario
+                        // puede re-seleccionar la carpeta desde Settings (que re-toma los
+                        // tree URIs) y la próxima vez que reabra Wave, isUriAccessible
+                        // debería devolver true para esos URIs.
+                        Log.w("PlaybackController", "restoreSavedQueue: all ${songs.size} songs inaccessible — keeping prefs for retry (user should re-select folder from Settings)")
+                        _state.value = _state.value.copy(playlist = songs, currentWindow = savedIndex.coerceIn(0, songs.size - 1))
                         return@launch
                     }
                     // Ajustar el savedIndex si las canciones anteriores al índice fueron caídas.
@@ -472,13 +479,19 @@ object PlaybackController {
     }
 
     /**
-     * CRITICAL FIX (loop infinito tras restart): valida si un filePath (que puede
-     * ser un content:// URI del SAF, un file:// URI, o un path absoluto) es
-     * realmente accesible desde el proceso actual. Abre un InputStream y lee 1
-     * byte para forzar el SecurityException si el persistable permission se perdió.
+     * CRITICAL FIX (v2.5.14 playback): valida si un filePath es accesible.
      *
-     * No cachear resultado por mucho tiempo — el permission puede cambiar entre
-     * el check y el uso (raro pero posible).
+     * CAMBIO v2.5.14: antes, cualquier excepción (incluidas IOException
+     * transitorias o ContentProvider timeouts) hacía que devolviera false y
+     * restoreSavedQueue borrara la cola entera. Eso causaba que al reabrir
+     * la app tras cerrarla, el play dejara de funcionar — el usuario veía
+     * una playlist vacía sin razón.
+     *
+     * Ahora solo devolvemos false si estamos SEGUROS de que el URI está
+     * muerto: SecurityException (permiso perdido) o FileNotFoundException
+     * (archivo borrado). Otras excepciones (IOException transitorio, etc.)
+     * devuelven true — dejamos que ExoPlayer intente reproducir; si falla,
+     * onPlayerError lo clasifica y playInternal hace skipToNext o stop.
      */
     private fun isUriAccessible(context: Context, path: String): Boolean {
         if (path.isBlank()) return false
@@ -486,23 +499,29 @@ object PlaybackController {
             if (path.startsWith("content://") || path.startsWith("file://")) {
                 val uri = android.net.Uri.parse(path)
                 context.contentResolver.openInputStream(uri)?.use { stream ->
-                    // Leer 1 byte para forzar el check real de permission.
-                    // Si el URI requiere FLAG_GRANT_READ_URI_PERMISSION y no lo
-                    // tenemos, openInputStream lanza SecurityException aquí mismo.
                     stream.read()
                     true
                 } ?: false
             } else {
-                // Path absoluto en filesystem (de MediaStore.Audio.Media.DATA).
                 val f = File(path)
                 f.exists() && f.canRead()
             }
         } catch (e: SecurityException) {
-            Log.w("PlaybackController", "isUriAccessible: SecurityException for $path")
+            // Permiso perdido — URI muerto. Solo este caso debe devolver false.
+            Log.w("PlaybackController", "isUriAccessible: SecurityException for $path (permission lost)")
+            false
+        } catch (e: java.io.FileNotFoundException) {
+            // Archivo borrado — URI muerto.
+            Log.w("PlaybackController", "isUriAccessible: FileNotFoundException for $path")
             false
         } catch (e: Exception) {
-            Log.w("PlaybackController", "isUriAccessible: ${e.javaClass.simpleName} for $path: ${e.message}")
-            false
+            // IOException transitorio, timeout del ContentProvider, etc. — NO
+            // descartar el URI. Dejar que ExoPlayer intente reproducirlo; si
+            // realmente está roto, onPlayerError clasificará el error y
+            // playInternal hará skipToNext o stop. Esto evita que se borre la
+            // cola entera por un false negative.
+            Log.w("PlaybackController", "isUriAccessible: ${e.javaClass.simpleName} for $path (will let ExoPlayer try): ${e.message}")
+            true
         }
     }
 
