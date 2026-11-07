@@ -175,7 +175,13 @@ object PlaybackController {
                     lastErrorWasPermanent = when (error.errorCode) {
                         PlaybackException.ERROR_CODE_IO_UNSPECIFIED,
                         PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND,
-                        PlaybackException.ERROR_CODE_IO_PERMISSION_DENIED,
+                        // CRITICAL FIX (build error Media3 1.4.1): la constante
+                        // ERROR_CODE_IO_PERMISSION_DENIED fue introducida en Media3
+                        // 1.5.0; en 1.4.1 no existe y el build falla con
+                        // 'Unresolved reference'. La quitamos de la lista de
+                        // permanentes — los SecurityException reales de SAF
+                        // típicamente se mapean a ERROR_CODE_IO_UNSPECIFIED
+                        // en Media3 1.4.x, así que siguen cubiertos.
                         PlaybackException.ERROR_CODE_IO_INVALID_HTTP_CONTENT_TYPE,
                         PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS,
                         PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
@@ -184,7 +190,12 @@ object PlaybackController {
                         PlaybackException.ERROR_CODE_DECODING_FAILED -> true
                         else -> false
                     }
-                    Log.e("PlaybackController", "onPlayerError: code=${error.errorCodeNameString} permanent=$lastErrorWasPermanent message=${error.message}", error)
+                    // CRITICAL FIX (build error Media3 1.4.1): errorCodeNameString
+                    // fue introducido en Media3 1.5.0; en 1.4.1 no existe. Usamos
+                    // error.errorCode (Int) que siempre existió — el log muestra
+                    // el número (-1007, -1003, etc.) en lugar del nombre legible,
+                    // pero es suficiente para diagnóstico.
+                    Log.e("PlaybackController", "onPlayerError: code=${error.errorCode} permanent=$lastErrorWasPermanent message=${error.message}", error)
                     // CRITICAL FIX (play button deja de funcionar): antes solo haciamos
                     // printStackTrace + refreshState. El player quedaba en estado zombie
                     // (STATE_IDLE con error) y play() no podia recuperarlo porque
