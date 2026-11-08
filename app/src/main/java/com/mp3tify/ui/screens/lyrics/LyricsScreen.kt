@@ -77,12 +77,13 @@ fun LyricsScreen(onBack: () -> Unit) {
 
     LaunchedEffect(current?.id) {
         // CRITICAL (v2.5.25): al cambiar de canción, subir el scroll al inicio.
-        // Sin esto, cuando termina una canción el scroll queda abajo (donde estaba
-        // la última línea) y al empezar la nueva canción no se ve la letra desde
-        // el principio. El usuario reportó: 'cuando termina la canción se queda
-        // en la parte de abajo y no se ve la letra cuando empieza a leerse'.
         try { listState.scrollToItem(0) } catch (_: Exception) {}
         val song = current
+        // CRITICAL (v2.5.26): resetear loading al inicio de cada ciclo. Sin esto,
+        // si el LaunchedEffect se cancela a mitad (porque current?.id cambió
+        // rapidamente, ej: skip varias veces), loading se queda en true para
+        // siempre y el usuario ve el spinner 'buscando letra' pegado.
+        loading = false
         parsed = null
         notAvailable = false
         if (song == null) {
@@ -94,27 +95,35 @@ fun LyricsScreen(onBack: () -> Unit) {
             notAvailable = true
             return@LaunchedEffect
         }
+        // CRITICAL (v2.5.26): try-finally para asegurar que loading siempre se
+        // resetee a false, incluso si la coroutine se cancela (CancellationException)
+        // o si hay un error inesperado. Sin esto, loading puede quedar en true.
         try {
             if (LrcLibClient.isCached(context, artist, track)) {
+                // Cache hit: cargar sincrónicamente (rápido, no necesita loading)
                 val raw = LrcLibClient.getLyrics(
                     context, artist, track, song.album, song.durationMs / 1000
                 )
                 val p = raw?.let { LrcParser.parse(it) }
                 if (p != null) parsed = p else notAvailable = true
             } else {
+                // Cache miss: fetch de red con loading visible
                 loading = true
                 val raw = withContext(Dispatchers.IO) {
                     LrcLibClient.getLyrics(
                         context, artist, track, song.album, song.durationMs / 1000
                     )
                 }
-                loading = false
                 val p = raw?.let { LrcParser.parse(it) }
                 if (p != null) parsed = p else notAvailable = true
             }
         } catch (e: Exception) {
-            loading = false
             notAvailable = true
+        } finally {
+            // CRITICAL (v2.5.26): SIEMPRE resetear loading, incluso si la
+            // coroutine fue cancelada (CancellationException no se catchea
+            // arriba porque es Exception, pero por seguridad lo ponemos aquí).
+            loading = false
         }
     }
 
