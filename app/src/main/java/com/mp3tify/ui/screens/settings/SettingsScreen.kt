@@ -68,6 +68,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.mp3tify.backup.BackupManager
+import com.mp3tify.BuildConfig
 import com.mp3tify.cloud.CloudBackupManager
 import com.mp3tify.data.repository.Repository
 import com.mp3tify.ui.components.ToggleRow
@@ -471,7 +472,12 @@ fun SettingsScreen(
             Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                 Text("Wave", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "${t("about_version")} 2.5.6",
+                    // CRITICAL FIX (v2.5.16): antes estaba hardcodeado "2.5.6"
+                    // y nunca se actualizaba aunque el APK fuera de una versión
+                    // más nueva. Ahora usa BuildConfig.VERSION_NAME que lee del
+                    // build.gradle.kts automáticamente. El usuario puede confiar
+                    // en este número para saber qué versión tiene instalada.
+                    "${t("about_version")} ${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
