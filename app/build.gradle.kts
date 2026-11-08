@@ -12,8 +12,8 @@ android {
         applicationId = "com.mp3tify"
         minSdk = 24
         targetSdk = 36
-        versionCode = 10
-        versionName = "2.5.14"
+        versionCode = 11
+        versionName = "2.5.15"
     }
 
     buildTypes {
@@ -37,6 +37,9 @@ android {
 
     buildFeatures {
         compose = true
+        // CRITICAL (v2.5.15): habilitado para usar BuildConfig.VERSION_NAME / VERSION_CODE
+        // en el header del log de errores (buildLogContent en SettingsScreen.kt).
+        buildConfig = true
     }
 
     composeOptions {
