@@ -32,7 +32,11 @@ data class Song(
     val artUri: String? = null,
     val lastModified: Long = 0,
     val isFavorite: Boolean = false,
-    val lastPlayedAt: Long = 0
+    val lastPlayedAt: Long = 0,
+    // CRITICAL (v2.5.24): género extraído de los metadatos del archivo
+    // (MediaMetadataRetriever.METADATA_KEY_GENRE). Se usa para crear playlists
+    // automáticas por género en Repository.createGenrePlaylists().
+    val genre: String? = null
 )
 
 /** Fallbacks so the UI never renders blank rows. */
