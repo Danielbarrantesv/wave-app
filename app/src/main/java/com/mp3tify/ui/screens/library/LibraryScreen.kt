@@ -303,6 +303,9 @@ fun LibraryScreen(
                 item {
                     // #2 Header horizontal: portada IZQ + titulo + count DER + chevron
                     // #1 Tap expande/colapsa la lista completa de canciones para limpiar la home.
+                    // CRITICAL (v2.5.23 UI): el DropdownMenu del sort ahora va DENTRO del
+                    // LibraryHeaderRow (en el Box del sort chip) para que aparezca justo
+                    // debajo del botón, no al final del item del LazyColumn.
                     LibraryHeaderRow(
                         songs = songs,
                         expanded = libraryExpanded,
@@ -310,33 +313,14 @@ fun LibraryScreen(
                         onPlayAll = { vm.playAll(false) },
                         onShuffleAll = { vm.playAll(true) },
                         onSortClick = { sortMenuOpen = true },
-                        sortLabel = sortLabel(sortOrder)
+                        sortLabel = sortLabel(sortOrder),
+                        sortMenuOpen = sortMenuOpen,
+                        onSortDismiss = { sortMenuOpen = false },
+                        onSortSelect = { order ->
+                            vm.setSortOrder(order)
+                            sortMenuOpen = false
+                        }
                     )
-                    DropdownMenu(
-                        expanded = sortMenuOpen,
-                        onDismissRequest = { sortMenuOpen = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text(t("sort_recently_added")) },
-                            onClick = { vm.setSortOrder(Repository.SortOrder.RECENTLY_ADDED); sortMenuOpen = false }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(t("sort_recently_played")) },
-                            onClick = { vm.setSortOrder(Repository.SortOrder.RECENTLY_PLAYED); sortMenuOpen = false }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(t("sort_title")) },
-                            onClick = { vm.setSortOrder(Repository.SortOrder.TITLE); sortMenuOpen = false }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(t("sort_artist")) },
-                            onClick = { vm.setSortOrder(Repository.SortOrder.ARTIST); sortMenuOpen = false }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(t("sort_duration")) },
-                            onClick = { vm.setSortOrder(Repository.SortOrder.DURATION); sortMenuOpen = false }
-                        )
-                    }
                 }
 
                 // ===== Sección Escuchadas recientemente (#4) =====
@@ -852,7 +836,12 @@ private fun LibraryHeaderRow(
     onPlayAll: () -> Unit,
     onShuffleAll: () -> Unit,
     onSortClick: () -> Unit,
-    sortLabel: String
+    sortLabel: String,
+    // CRITICAL (v2.5.23 UI): el DropdownMenu del sort ahora va dentro del Box del
+    // sort chip para que aparezca justo debajo del botón.
+    sortMenuOpen: Boolean = false,
+    onSortDismiss: () -> Unit = {},
+    onSortSelect: (Repository.SortOrder) -> Unit = {}
 ) {
     Surface(
         color = MaterialTheme.colorScheme.surface,
@@ -885,7 +874,8 @@ private fun LibraryHeaderRow(
                 )
                 Spacer(Modifier.height(6.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Sort chip (tap abre menú)
+                    // Sort chip (tap abre menú) + DropdownMenu DENTRO del Box para
+                    // que aparezca justo debajo del botón.
                     Box {
                         TextButton(
                             onClick = onSortClick,
@@ -902,6 +892,36 @@ private fun LibraryHeaderRow(
                                 sortLabel,
                                 style = MaterialTheme.typography.bodySmall,
                                 maxLines = 1
+                            )
+                        }
+                        // CRITICAL (v2.5.23 UI): DropdownMenu DENTRO del Box del sort chip.
+                        // Antes estaba fuera del LibraryHeaderRow (en el item del LazyColumn),
+                        // lo que hacía que apareciera 'abajo casi al final' en lugar de
+                        // 'debajo del botón'. Ahora se posiciona relativamente al Box del
+                        // sort chip, apareciendo justo debajo del botón.
+                        DropdownMenu(
+                            expanded = sortMenuOpen,
+                            onDismissRequest = onSortDismiss
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text(t("sort_recently_added")) },
+                                onClick = { onSortSelect(Repository.SortOrder.RECENTLY_ADDED) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(t("sort_recently_played")) },
+                                onClick = { onSortSelect(Repository.SortOrder.RECENTLY_PLAYED) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(t("sort_title")) },
+                                onClick = { onSortSelect(Repository.SortOrder.TITLE) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(t("sort_artist")) },
+                                onClick = { onSortSelect(Repository.SortOrder.ARTIST) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(t("sort_duration")) },
+                                onClick = { onSortSelect(Repository.SortOrder.DURATION) }
                             )
                         }
                     }
