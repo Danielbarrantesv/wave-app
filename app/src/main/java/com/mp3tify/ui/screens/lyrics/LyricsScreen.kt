@@ -76,8 +76,12 @@ fun LyricsScreen(onBack: () -> Unit) {
     val listState = rememberLazyListState()
 
     LaunchedEffect(current?.id) {
-        // CRITICAL (v2.5.25): al cambiar de canción, subir el scroll al inicio.
-        try { listState.scrollToItem(0) } catch (_: Exception) {}
+        // CRITICAL (v2.5.27): REVERTIDO el listState.scrollToItem(0) de v2.5.25.
+        // El usuario reportó que causaba el spinner 'buscando letra' pegado.
+        // Probablemente scrollToItem(0) se cuelga cuando el LazyColumn aún no
+        // tiene items renderizados (parsed == null al inicio del ciclo), y eso
+        // bloquea el LaunchedEffect antes de que pueda setear loading o cargar
+        // las letras. Sin esta línea, el flujo funciona correctamente.
         val song = current
         // CRITICAL (v2.5.26): resetear loading al inicio de cada ciclo. Sin esto,
         // si el LaunchedEffect se cancela a mitad (porque current?.id cambió
