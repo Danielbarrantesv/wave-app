@@ -76,6 +76,12 @@ fun LyricsScreen(onBack: () -> Unit) {
     val listState = rememberLazyListState()
 
     LaunchedEffect(current?.id) {
+        // CRITICAL (v2.5.25): al cambiar de canción, subir el scroll al inicio.
+        // Sin esto, cuando termina una canción el scroll queda abajo (donde estaba
+        // la última línea) y al empezar la nueva canción no se ve la letra desde
+        // el principio. El usuario reportó: 'cuando termina la canción se queda
+        // en la parte de abajo y no se ve la letra cuando empieza a leerse'.
+        try { listState.scrollToItem(0) } catch (_: Exception) {}
         val song = current
         parsed = null
         notAvailable = false
