@@ -508,11 +508,15 @@ object PlaybackController {
                 // Sin este fix, isUriAccessible devuelve true para URIs muertos,
                 // los pasa a setQueue, y ExoPlayer falla con SecurityException en
                 // el loop infinito visible en el log v2.5.18.
+                //
+                // CRITICAL FIX (v2.5.20): usar la firma de 3 argumentos (uri, mimeType,
+                // opts: Bundle?) en lugar de 4 args. La firma de 4 args espera
+                // CancellationSignal como 4to parámetro, no Bundle — pasamos null
+                // como opts que es suficiente para forzar el check de permission.
                 context.contentResolver.openTypedAssetFileDescriptor(
                     uri,
                     "application/octet-stream",
-                    null,
-                    android.os.Bundle()
+                    null
                 )?.use { afd ->
                     afd.createInputStream()?.use { stream ->
                         stream.read()
