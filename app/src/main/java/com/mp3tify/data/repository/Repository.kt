@@ -322,6 +322,57 @@ class Repository private constructor(private val context: Context) {
         }
     }
 
+    /**
+     * CRITICAL (v2.5.24): crea playlists automáticas por género.
+     *
+     * Lee todas las canciones que tienen campo genre no nulo, las agrupa por
+     * género, y para cada género crea una playlist con ese nombre (o usa una
+     * existente si ya hay una con ese nombre) y agrega las canciones.
+     *
+     * Llamado después de importar música (importFolderInternal, importFiles)
+     * para que las playlists por género se actualicen automáticamente.
+     *
+     * Las playlists por género son playlists normales — el usuario puede
+     * renombrarlas, agregar/quitar canciones, o borrarlas. Si se borran,
+     * se recrean la próxima vez que se importe música.
+     */
+    suspend fun createGenrePlaylists() {
+        try {
+            val allSongs = songDao.listAll()
+            val songsWithGenre = allSongs.filter { !it.genre.isNullOrBlank() }
+            if (songsWithGenre.isEmpty()) return
+            // Agrupar por género (case-insensitive para evitar duplicados
+            // como "Rock" vs "rock" vs "ROCK").
+            val byGenre = songsWithGenre.groupBy { it.genre!!.trim().lowercase() }
+            val now = System.currentTimeMillis()
+            for ((genreKey, songs) in byGenre) {
+                // Usar el nombre original del primer song con ese género
+                // (preserva capitalización original del tag).
+                val displayName = songs.first().genre!!.trim()
+                val existing = playlistDao.getByName(displayName)
+                val playlistId = if (existing != null) {
+                    existing.id
+                } else {
+                    playlistDao.insert(
+                        Playlist(
+                            name = displayName,
+                            description = "auto-genre",
+                            createdAt = now,
+                            updatedAt = now
+                        )
+                    )
+                }
+                if (playlistId > 0) {
+                    // addSongsToPlaylist hace dedup internamente (no agrega
+                    // canciones que ya están en la playlist).
+                    playlistDao.addSongsToPlaylist(playlistId, songs.map { it.id })
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     suspend fun wipeAllUserData() {
         try {
             songDao.deleteAll()
@@ -486,6 +537,8 @@ class Repository private constructor(private val context: Context) {
                     playlistDao.addSongsToPlaylist(targetPlaylistId, playlistAttachIds.toSet().toList())
                 }
             } catch (e: Exception) { e.printStackTrace() }
+            // CRITICAL (v2.5.24): crear playlists automáticas por género después de importar.
+            if (added > 0) createGenrePlaylists()
             ImportResult(added, duplicates, total)
         }
 
@@ -554,6 +607,8 @@ class Repository private constructor(private val context: Context) {
                     }
                 }
             } catch (e: Exception) { e.printStackTrace() }
+            // CRITICAL (v2.5.24): crear playlists automáticas por género después de importar.
+            if (added > 0) createGenrePlaylists()
             ImportResult(added, duplicates, total)
         }
 
@@ -582,6 +637,12 @@ class Repository private constructor(private val context: Context) {
                 ?.substringBefore('/')?.toIntOrNull()
             val year = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_YEAR)?.toIntOrNull()
             val mime = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_MIMETYPE) ?: df.type
+            // CRITICAL (v2.5.24): extraer género de los metadatos del archivo.
+            // Se usa para crear playlists automáticas por género en
+            // Repository.createGenrePlaylists(). Algunos archivos pueden no
+            // tener género en sus tags — en ese caso queda null y la canción
+            // no se agrega a ninguna playlist de género.
+            val genre = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_GENRE)
 
             // Embedded art → cacheDir/art/art_{hash}.jpg
             var artUri: String? = null
@@ -624,7 +685,8 @@ class Repository private constructor(private val context: Context) {
                 dateAddedSec = System.currentTimeMillis() / 1000,
                 fingerprint = fingerprint,
                 artUri = artUri,
-                lastModified = df.lastModified()
+                lastModified = df.lastModified(),
+                genre = genre  // CRITICAL (v2.5.24): género para playlists automáticas
             )
         } catch (e: Exception) {
             e.printStackTrace()
