@@ -311,9 +311,75 @@ object PlaybackController {
         } catch (e: Exception) { e.printStackTrace() }
     }
 
-    private fun toMediaUri(path: String): android.net.Uri =
-        if (path.startsWith("content://") || path.startsWith("file://")) android.net.Uri.parse(path)
-        else android.net.Uri.fromFile(File(path))
+    private fun toMediaUri(path: String): android.net.Uri {
+        if (path.startsWith("content://")) {
+            val uri = android.net.Uri.parse(path)
+            // CRITICAL FIX (v2.5.21): si el URI es del ExternalStorageProvider
+            // y NO tiene estructura tree (path empieza con "/document/" sin "/tree/"),
+            // intentar reconstruirlo via DocumentsContract.buildDocumentUriUsingTree
+            // usando los tree URIs persistidos en BackupUriManager.
+            //
+            // Esto arregla URIs viejos guardados en la DB antes del fix v2.5.18
+            // (cuando takePersistableUriPermission fallaba con flags 0x81). Esos
+            // URIs tienen estructura content://com.android.externalstorage.documents/document/{docId}
+            // SIN la parte /tree/{treeDocId}/ que Android necesita para reconocer
+            // el tree permission. Al reconstruirlos via buildDocumentUriUsingTree,
+            // Android asocia el URI con el tree persistido y permite el acceso.
+            //
+            // Sin este fix, isUriAccessible y ExoPlayer ven SecurityException
+            // aunque el tree URI esté correctamente persistido.
+            if (uri.authority == "com.android.externalstorage.documents") {
+                val uriPath = uri.path ?: ""
+                if (uriPath.startsWith("/document/") && !uriPath.contains("/tree/")) {
+                    val reconstructed = reconstructSafUri(uri)
+                    if (reconstructed != null) return reconstructed
+                }
+            }
+            return uri
+        }
+        if (path.startsWith("file://")) return android.net.Uri.parse(path)
+        return android.net.Uri.fromFile(File(path))
+    }
+
+    /**
+     * CRITICAL FIX (v2.5.21): reconstruye un URI del ExternalStorageProvider
+     * que tiene estructura vieja (/document/{docId} sin /tree/) usando los
+     * tree URIs persistidos en BackupUriManager.
+     *
+     * Busca el tree URI cuyo docId es prefix del docId del archivo, y construye
+     * el URI completo via DocumentsContract.buildDocumentUriUsingTree(treeUri, docId).
+     *
+     * Retorna null si no encuentra un tree URI que coincida.
+     */
+    private fun reconstructSafUri(documentUri: android.net.Uri): android.net.Uri? {
+        val ctx = appCtx ?: return null
+        return try {
+            // Extraer el docId del URI viejo: /document/{docId}
+            val rawDocId = documentUri.path!!.removePrefix("/document/")
+            val decodedDocId = android.net.Uri.decode(rawDocId)
+
+            // Obtener los tree URIs persistidos
+            val treeUris = com.mp3tify.backup.BackupUriManager.listTreeUris(ctx)
+            for (treeUriStr in treeUris) {
+                val treeUri = android.net.Uri.parse(treeUriStr)
+                val treePath = treeUri.path ?: continue
+                if (!treePath.startsWith("/tree/")) continue
+                val treeDocId = android.net.Uri.decode(treePath.removePrefix("/tree/"))
+                // Verificar si el treeDocId es prefix del docId del archivo.
+                // Ej: treeDocId="67DA-77A3:Musica", docId="67DA-77A3:Musica/Rock/Comfortably Numb.mp3"
+                if (decodedDocId == treeDocId || decodedDocId.startsWith("$treeDocId/")) {
+                    val reconstructed = android.provider.DocumentsContract.buildDocumentUriUsingTree(treeUri, decodedDocId)
+                    Log.i("PlaybackController", "reconstructSafUri: reconstructed $documentUri → $reconstructed (tree: $treeUriStr)")
+                    return reconstructed
+                }
+            }
+            Log.w("PlaybackController", "reconstructSafUri: no matching tree URI found for $documentUri (checked ${treeUris.size} tree URIs)")
+            null
+        } catch (e: Exception) {
+            Log.w("PlaybackController", "reconstructSafUri: failed for $documentUri: ${e.message}")
+            null
+        }
+    }
 
     /**
      * Convierte un Song.artUri (path local tipo /data/.../cacheDir/art/art_XYZ.jpg)
@@ -497,7 +563,13 @@ object PlaybackController {
         if (path.isBlank()) return false
         return try {
             if (path.startsWith("content://") || path.startsWith("file://")) {
-                val uri = android.net.Uri.parse(path)
+                // CRITICAL FIX (v2.5.21): usar toMediaUri(path) en lugar de
+                // Uri.parse(path) directamente. toMediaUri reconstruye URIs viejos
+                // (sin estructura tree) via DocumentsContract.buildDocumentUriUsingTree
+                // usando los tree URIs persistidos. Sin esto, isUriAccessible
+                // devuelve false para URIs viejos aunque el tree esté persistido
+                // correctamente.
+                val uri = toMediaUri(path)
                 // CRITICAL FIX (v2.5.19): usar openTypedAssetFileDescriptor (la MISMA
                 // API que ExoPlayer usa via ContentDataSource.open) en lugar de
                 // openInputStream. openInputStream usa openAssetFileDescriptor
