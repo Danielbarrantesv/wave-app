@@ -498,9 +498,26 @@ object PlaybackController {
         return try {
             if (path.startsWith("content://") || path.startsWith("file://")) {
                 val uri = android.net.Uri.parse(path)
-                context.contentResolver.openInputStream(uri)?.use { stream ->
-                    stream.read()
-                    true
+                // CRITICAL FIX (v2.5.19): usar openTypedAssetFileDescriptor (la MISMA
+                // API que ExoPlayer usa via ContentDataSource.open) en lugar de
+                // openInputStream. openInputStream usa openAssetFileDescriptor
+                // internamente, que puede NO lanzar SecurityException para URIs SAF
+                // con permiso perdido. openTypedAssetFileDescriptor SÍ lanza
+                // SecurityException en ese caso, porque es la API que el
+                // ExternalStorageProvider verifica contra los persistable grants.
+                // Sin este fix, isUriAccessible devuelve true para URIs muertos,
+                // los pasa a setQueue, y ExoPlayer falla con SecurityException en
+                // el loop infinito visible en el log v2.5.18.
+                context.contentResolver.openTypedAssetFileDescriptor(
+                    uri,
+                    "application/octet-stream",
+                    null,
+                    android.os.Bundle()
+                )?.use { afd ->
+                    afd.createInputStream()?.use { stream ->
+                        stream.read()
+                        true
+                    } ?: false
                 } ?: false
             } else {
                 val f = File(path)
@@ -508,18 +525,14 @@ object PlaybackController {
             }
         } catch (e: SecurityException) {
             // Permiso perdido — URI muerto. Solo este caso debe devolver false.
-            Log.w("PlaybackController", "isUriAccessible: SecurityException for $path (permission lost)")
+            Log.w("PlaybackController", "isUriAccessible: SecurityException for $path (permission lost — user should re-select folder)")
             false
         } catch (e: java.io.FileNotFoundException) {
             // Archivo borrado — URI muerto.
             Log.w("PlaybackController", "isUriAccessible: FileNotFoundException for $path")
             false
         } catch (e: Exception) {
-            // IOException transitorio, timeout del ContentProvider, etc. — NO
-            // descartar el URI. Dejar que ExoPlayer intente reproducirlo; si
-            // realmente está roto, onPlayerError clasificará el error y
-            // playInternal hará skipToNext o stop. Esto evita que se borre la
-            // cola entera por un false negative.
+            // Otras excepciones — NO descartar el URI. Dejar que ExoPlayer intente.
             Log.w("PlaybackController", "isUriAccessible: ${e.javaClass.simpleName} for $path (will let ExoPlayer try): ${e.message}")
             true
         }
