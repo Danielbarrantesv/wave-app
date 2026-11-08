@@ -765,13 +765,27 @@ private suspend fun generateAndSaveLogToFolder(
         val fileName = "wave_error_log_$timestamp.txt"
         val logContent = buildLogContent(context)
 
-        // 2. Crear el archivo dentro del tree URI usando DocumentsContract
+        // 2. CRITICAL FIX (v2.5.17): convertir tree URI → document URI.
+        // OpenDocumentTree devuelve un tree URI (carpeta) con scheme
+        // 'content://com.android.externalstorage.documents/tree/...'.
+        // DocumentsContract.createDocument requiere un DOCUMENT URI, no un
+        // tree URI. Sin esta conversión, createDocument devuelve null y el
+        // usuario ve 'Error: Invalid URI'.
+        // Pasos:
+        //   a) getTreeDocumentId(treeUri) → "primary:Music" (docId del árbol)
+        //   b) buildDocumentUriUsingTree(treeUri, docId) → URI del documento
+        //      "primario" dentro del árbol (la carpeta misma como documento)
+        //   c) createDocument(parentDocUri, mime, fileName) → crea el archivo
+        //      dentro de esa carpeta y devuelve el URI del archivo creado
+        val treeDocId = android.provider.DocumentsContract.getTreeDocumentId(folderUri)
+        val parentDocUri = android.provider.DocumentsContract.buildDocumentUriUsingTree(folderUri, treeDocId)
+            ?: throw java.io.IOException("No se pudo construir el document URI de la carpeta seleccionada")
         val createdUri = android.provider.DocumentsContract.createDocument(
             context.contentResolver,
-            folderUri,
+            parentDocUri,
             "text/plain",
             fileName
-        ) ?: throw java.io.IOException("No se pudo crear el archivo en la carpeta seleccionada")
+        ) ?: throw java.io.IOException("No se pudo crear el archivo en la carpeta seleccionada (createDocument devolvió null)")
 
         // 3. Escribir el contenido
         context.contentResolver.openOutputStream(createdUri, "w")?.use { out ->
