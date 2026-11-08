@@ -107,6 +107,44 @@ fun SettingsScreen(
     // #4 Log de errores: dialog que muestra el path del archivo generado
     var showLogDialog by remember { mutableStateOf(false) }
     var logFilePath by remember { mutableStateOf<String?>(null) }
+    // CRITICAL (v2.5.15 diagnóstico): state para guardar logs en una carpeta
+    // seleccionable por el usuario (SAF). El flujo anterior solo generaba el
+    // log en cacheDir (no accesible sin root). Ahora el usuario puede:
+    //   1. Click "Guardar en carpeta..." → SAF picker → el log se escribe
+    //      directamente en la carpeta seleccionada.
+    //   2. Click "Compartir" → Intent.ACTION_SEND con el último URI guardado.
+    var savedLogUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    var savedLogFileName by remember { mutableStateOf<String?>(null) }
+    // SAF launcher para seleccionar carpeta de logs.
+    val logFolderLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri: android.net.Uri? ->
+        if (uri != null) {
+            // Tomar permiso persistable para acceder a la carpeta después de
+            // cerrar/reabrir la app.
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            } catch (_: SecurityException) {}
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val result = generateAndSaveLogToFolder(context, uri)
+                    withContext(Dispatchers.Main) {
+                        savedLogUri = result.first
+                        savedLogFileName = result.second
+                        logFilePath = result.second  // Para mostrar también en el diálogo
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    withContext(Dispatchers.Main) {
+                        savedLogFileName = "Error: ${e.message}"
+                    }
+                }
+            }
+        }
+    }
     var wipeDoneMessage by remember { mutableStateOf<String?>(null) }
     var isRestoring by remember { mutableStateOf(false) }
     var restoreProgress by remember { mutableStateOf(0) }
@@ -598,6 +636,8 @@ fun SettingsScreen(
         }
 
         // #4 Log de errores: dialog que genera un archivo con los logs de la app
+        // CRITICAL (v2.5.15 diagnóstico): extendido para que el usuario pueda
+        // seleccionar carpeta accesible vía SAF y compartir directamente.
         if (showLogDialog) {
             AlertDialog(
                 onDismissRequest = { showLogDialog = false },
@@ -611,7 +651,35 @@ fun SettingsScreen(
                 text = {
                     Column {
                         Text(t("error_log_desc"), style = MaterialTheme.typography.bodyMedium)
-                        if (logFilePath != null) {
+                        // Mostrar nombre del archivo guardado (en carpeta seleccionada)
+                        if (savedLogFileName != null) {
+                            Spacer(Modifier.height(12.dp))
+                            Text(
+                                t("error_log_saved_at") + ":",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                savedLogFileName!!,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Medium
+                            )
+                            // Botón compartir (solo si hay URI guardado)
+                            if (savedLogUri != null) {
+                                Spacer(Modifier.height(8.dp))
+                                TextButton(
+                                    onClick = { shareLogFile(context, savedLogUri!!) },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Icon(Icons.Filled.CloudUpload, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(t("error_log_share"))
+                                }
+                            }
+                        }
+                        // Path del log en cacheDir (si se generó con el botón anterior)
+                        if (logFilePath != null && savedLogFileName == null) {
                             Spacer(Modifier.height(12.dp))
                             Text(
                                 t("error_log_path") + ":",
@@ -627,25 +695,155 @@ fun SettingsScreen(
                     }
                 },
                 confirmButton = {
-                    TextButton(onClick = {
-                        scope.launch(Dispatchers.IO) {
-                            try {
-                                val log = generateErrorLog(context)
-                                withContext(Dispatchers.Main) {
-                                    logFilePath = log
-                                }
-                            } catch (e: Exception) {
-                                e.printStackTrace()
-                                withContext(Dispatchers.Main) {
-                                    logFilePath = "Error: ${e.message}"
+                    // CRITICAL (v2.5.15): botón principal ahora abre SAF picker
+                    // para seleccionar carpeta accesible. El log se escribe ahí
+                    // directamente (no en cacheDir).
+                    TextButton(onClick = { logFolderLauncher.launch(null) }) {
+                        Icon(Icons.Filled.Folder, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(t("error_log_save_to_folder"))
+                    }
+                },
+                dismissButton = {
+                    Row {
+                        // Botón "Generar" (cacheDir) — alternativa para compat con
+                        // versiones anteriores donde el usuario ya conoce el flujo.
+                        TextButton(onClick = {
+                            scope.launch(Dispatchers.IO) {
+                                try {
+                                    val log = generateErrorLog(context)
+                                    withContext(Dispatchers.Main) {
+                                        logFilePath = log
+                                        savedLogFileName = null
+                                        savedLogUri = null
+                                    }
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
+                                    withContext(Dispatchers.Main) {
+                                        logFilePath = "Error: ${e.message}"
+                                    }
                                 }
                             }
-                        }
-                    }) { Text(t("error_log_generate")) }
-                },
-                dismissButton = { TextButton(onClick = { showLogDialog = false }) { Text(t("close")) } }
+                        }) { Text(t("error_log_generate")) }
+                        Spacer(Modifier.width(4.dp))
+                        TextButton(onClick = { showLogDialog = false }) { Text(t("close")) }
+                    }
+                }
             )
         }
+    }
+}
+
+/**
+ * CRITICAL (v2.5.15 diagnóstico): genera el log de errores y lo escribe
+ * directamente en una carpeta seleccionada por el usuario vía SAF.
+ *
+ * El flujo es:
+ *  1. Generar el contenido del log (mismo que generateErrorLog pero sin escribir
+ *     a cacheDir).
+ *  2. Crear un archivo wave_error_log_<timestamp>.txt dentro del tree URI
+ *     seleccionado por el usuario, usando DocumentsContract.createDocument.
+ *  3. Escribir el contenido al URI del archivo recién creado vía
+ *     contentResolver.openOutputStream.
+ *
+ * Retorna (uri del archivo, nombre del archivo) para que el UI pueda mostrar
+ * el nombre y ofrecer compartirlo.
+ */
+private suspend fun generateAndSaveLogToFolder(
+    context: android.content.Context,
+    folderUri: android.net.Uri
+): Pair<android.net.Uri, String> {
+    return withContext(Dispatchers.IO) {
+        // 1. Generar contenido del log
+        val timestamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())
+        val fileName = "wave_error_log_$timestamp.txt"
+        val logContent = buildLogContent(context)
+
+        // 2. Crear el archivo dentro del tree URI usando DocumentsContract
+        val createdUri = android.provider.DocumentsContract.createDocument(
+            context.contentResolver,
+            folderUri,
+            "text/plain",
+            fileName
+        ) ?: throw java.io.IOException("No se pudo crear el archivo en la carpeta seleccionada")
+
+        // 3. Escribir el contenido
+        context.contentResolver.openOutputStream(createdUri, "w")?.use { out ->
+            out.write(logContent.toByteArray())
+            out.flush()
+        } ?: throw java.io.IOException("No se pudo abrir el archivo para escritura")
+
+        Pair(createdUri, fileName)
+    }
+}
+
+/**
+ * Construye el contenido del log de errores: header con info del dispositivo
+ * + captura de logcat filtrado por tags relevantes.
+ */
+private fun buildLogContent(context: android.content.Context): String {
+    val logBuilder = StringBuilder()
+    logBuilder.appendLine("=== Wave Error Log ===")
+    logBuilder.appendLine("Version: ${com.mp3tify.BuildConfig.VERSION_NAME} (code ${com.mp3tify.BuildConfig.VERSION_CODE})")
+    logBuilder.appendLine("Date: ${java.util.Date()}")
+    logBuilder.appendLine("Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
+    logBuilder.appendLine("Android: ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})")
+    logBuilder.appendLine()
+    logBuilder.appendLine("=== Logs ===")
+    logBuilder.appendLine()
+    try {
+        // Capturar logcat del proceso actual filtrado por tags relevantes
+        val pid = android.os.Process.myPid()
+        val tags = listOf(
+            "PlaybackController",
+            "EqualizerManager",
+            "MediaPlaybackService",
+            "MP3tifyApp",
+            "MainActivity",
+            "AndroidRuntime",
+            "System.err",
+            "Wave"
+        )
+        val command = mutableListOf("logcat", "-d", "--pid=$pid")
+        for (tag in tags) {
+            command.add("$tag:*")
+        }
+        command.add("*:S")  // silenciar todo lo demas
+        val process = Runtime.getRuntime().exec(command.toTypedArray())
+        val reader = java.io.BufferedReader(java.io.InputStreamReader(process.inputStream))
+        var line: String?
+        while (reader.readLine().also { line = it } != null) {
+            logBuilder.appendLine(line)
+        }
+        reader.close()
+        process.destroy()
+    } catch (e: Exception) {
+        logBuilder.appendLine("Error capturing logcat: ${e.message}")
+    }
+    logBuilder.appendLine()
+    logBuilder.appendLine("=== End of Log ===")
+    return logBuilder.toString()
+}
+
+/**
+ * CRITICAL (v2.5.15 diagnóstico): comparte el archivo de log vía Intent.ACTION_SEND.
+ * Abre el menú de compartir del sistema (Telegram, email, WhatsApp, etc.) con
+ * el archivo .txt adjunto. El usuario puede mandárselo al dev para diagnóstico.
+ */
+private fun shareLogFile(context: android.content.Context, fileUri: android.net.Uri) {
+    try {
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_SUBJECT, "Wave error log")
+            putExtra(Intent.EXTRA_STREAM, fileUri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        val chooser = Intent.createChooser(shareIntent, context.getString(com.mp3tify.R.string.app_name) + " — log").apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(chooser)
+    } catch (e: Exception) {
+        e.printStackTrace()
     }
 }
 
