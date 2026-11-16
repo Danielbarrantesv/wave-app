@@ -346,7 +346,6 @@ fun LibraryScreen(
                                     song = song,
                                     onClick = {
                                         vm.play(song)
-                                        onOpenNowPlaying()
                                     }
                                 )
                             }
@@ -452,12 +451,10 @@ fun LibraryScreen(
                                     onClick = {
                                         // Tap: reproduce todas las canciones del artista
                                         vm.playArtist(artist, shuffle = false)
-                                        onOpenNowPlaying()
                                     },
                                     onShuffleClick = {
                                         // Botón de shuffle dedicado en la card
                                         vm.playArtist(artist, shuffle = true)
-                                        onOpenNowPlaying()
                                     }
                                 )
                             }
@@ -493,7 +490,6 @@ fun LibraryScreen(
                                             vm.toggleSelected(song.id)
                                         } else {
                                             vm.play(song)
-                                            onOpenNowPlaying()
                                         }
                                     },
                                     onLongClick = { vm.toggleSelected(song.id) },
@@ -1292,15 +1288,23 @@ private fun AddToPlaylistDialog(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 } else {
-                    playlists.forEach { pl ->
-                        Text(
-                            pl.name,
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onPick(pl.id) }
-                                .padding(vertical = 10.dp)
-                        )
+                    // CRITICAL (v2.5.28): LazyColumn con altura máxima para que el
+                    // diálogo sea scrolleable cuando hay muchos playlists. Antes
+                    // usaba forEach en un Column plano, lo que hacía que los
+                    // playlists de abajo no se vieran (desbordaban el diálogo).
+                    LazyColumn(
+                        modifier = Modifier.heightIn(max = 400.dp)
+                    ) {
+                        items(playlists, key = { it.id }) { pl ->
+                            Text(
+                                pl.name,
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onPick(pl.id) }
+                                    .padding(vertical = 10.dp)
+                            )
+                        }
                     }
                 }
                 Spacer(Modifier.height(8.dp))
