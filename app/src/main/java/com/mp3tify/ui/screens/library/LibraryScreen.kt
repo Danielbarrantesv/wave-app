@@ -253,19 +253,9 @@ fun LibraryScreen(
             },
             bottomBar = {
                 PlayerBar(state = playbackState, onOpenNowPlaying = onOpenNowPlaying)
-            },
-            floatingActionButton = {
-                ExtendedFloatingActionButton(
-                    onClick = { showAddMusicDialog = true },
-                    icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                    // CRITICAL (v2.5.13 UI): texto compacto "+ Música" en lugar de
-                    // "Agregar música" para que el FAB ocupe menos espacio en
-                    // pantallas pequeñas y sea más rápido de leer.
-                    text = { Text(t("add_music_short")) },
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = Color.Black
-                )
             }
+            // CRITICAL (v2.5.31): FAB quitado por solicitud del dev. El botón
+            // de agregar música sigue disponible en el TopAppBar (icono LibraryMusic).
         ) { padding ->
             Column(
                 Modifier
@@ -308,12 +298,12 @@ fun LibraryScreen(
                 // el contenido del LazyColumn.
                 val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
-                Row(Modifier.fillMaxSize()) {
+                Row(Modifier.weight(1f).fillMaxWidth()) {
                     if (isLandscape) {
                         // Panel izquierdo: playlists en vertical (scroll independiente)
                         LazyColumn(
                             modifier = Modifier
-                                .weight(0.33f)
+                                .weight(0.25f)
                                 .fillMaxHeight()
                                 .padding(end = 4.dp)
                         ) {
@@ -336,7 +326,7 @@ fun LibraryScreen(
                     }
                     // Panel derecho (o único en portrait): contenido actual
                     ScrollbarLazyColumn(
-                        modifier = if (isLandscape) Modifier.weight(0.67f).fillMaxHeight() else Modifier.fillMaxSize(),
+                        modifier = if (isLandscape) Modifier.weight(0.75f).fillMaxHeight() else Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(bottom = 96.dp)
                     ) {
                 item {

@@ -538,7 +538,10 @@ class Repository private constructor(private val context: Context) {
                 }
             } catch (e: Exception) { e.printStackTrace() }
             // CRITICAL (v2.5.24): crear playlists automáticas por género después de importar.
-            if (added > 0) createGenrePlaylists()
+            // CRITICAL (v2.5.31): createGenrePlaylists desactivado por solicitud
+            // del dev — 'se hace mucho desorden'. Las playlists por género existentes
+            // no se borran, pero no se crean nuevas al importar.
+            // if (added > 0) createGenrePlaylists()
             ImportResult(added, duplicates, total)
         }
 
@@ -608,7 +611,10 @@ class Repository private constructor(private val context: Context) {
                 }
             } catch (e: Exception) { e.printStackTrace() }
             // CRITICAL (v2.5.24): crear playlists automáticas por género después de importar.
-            if (added > 0) createGenrePlaylists()
+            // CRITICAL (v2.5.31): createGenrePlaylists desactivado por solicitud
+            // del dev — 'se hace mucho desorden'. Las playlists por género existentes
+            // no se borran, pero no se crean nuevas al importar.
+            // if (added > 0) createGenrePlaylists()
             ImportResult(added, duplicates, total)
         }
 

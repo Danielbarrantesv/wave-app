@@ -161,7 +161,21 @@ object PlaybackController {
                         lastErrorWasPermanent = false
                     }
                 }
-                override fun onPlaybackStateChanged(playbackState: Int) { refreshState() }
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    refreshState()
+                    // CRITICAL (v2.5.31): si terminó la cola (STATE_ENDED) y repeatAll
+                    // está activado, forzar el seek al inicio de la cola y play.
+                    // ExoPlayer con REPEAT_MODE_ALL debería hacerlo nativamente, pero
+                    // el usuario reportó que 'cuando una playlist llega a terminar la
+                    // última canción deja de sonar'. Esto es un safety net.
+                    if (playbackState == Player.STATE_ENDED && p.repeatMode == Player.REPEAT_MODE_ALL && p.mediaItemCount > 0) {
+                        try {
+                            p.seekTo(0, 0L)
+                            p.prepare()
+                            p.play()
+                        } catch (e: Exception) { e.printStackTrace() }
+                    }
+                }
                 override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
                     _state.value = _state.value.copy(shuffle = shuffleModeEnabled)
                 }
