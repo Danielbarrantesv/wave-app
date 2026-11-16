@@ -397,7 +397,6 @@ fun PlaylistScreen(
                                         vm.toggleSelected(song.id)
                                     } else {
                                         vm.play(song)
-                                        onOpenNowPlaying()
                                     }
                                 },
                                 onLongClick = { vm.toggleSelected(song.id) },
