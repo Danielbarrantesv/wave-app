@@ -486,11 +486,13 @@ fun NowPlayingScreen(
                             modifier = Modifier.size(22.dp)
                         )
                     }
-                    IconButton(onClick = { PlaybackController.setRepeatOne(!state.repeatOne) }, modifier = Modifier.size(40.dp)) {
+                    // CRITICAL (v2.5.30): botón repeat ahora cicle OFF → ONE → ALL → OFF.
+                    // Iconos: OFF = Repeat (gris), ONE = RepeatOne (primario), ALL = Repeat (primario).
+                    IconButton(onClick = { PlaybackController.cycleRepeatMode() }, modifier = Modifier.size(40.dp)) {
                         Icon(
                             if (state.repeatOne) Icons.Filled.RepeatOne else Icons.Filled.Repeat,
                             contentDescription = t("repeat"),
-                            tint = if (state.repeatOne) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.9f),
+                            tint = if (state.repeatOne || state.repeatAll) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.9f),
                             modifier = Modifier.size(22.dp)
                         )
                     }

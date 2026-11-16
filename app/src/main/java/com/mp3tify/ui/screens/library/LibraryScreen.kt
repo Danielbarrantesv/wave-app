@@ -1,6 +1,7 @@
 package com.mp3tify.ui.screens.library
 
 import android.content.Intent
+import android.content.res.Configuration
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.statusBars
@@ -80,6 +82,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -297,10 +300,45 @@ fun LibraryScreen(
                     )
                 }
 
-                ScrollbarLazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 96.dp)
-                ) {
+                // CRITICAL (v2.5.30): en landscape, mostrar 2 paneles lado a lado:
+                // izquierdo = playlists vertical, derecho = contenido actual (header + songs).
+                // En portrait, mantener el layout vertical de scroll único.
+                // Usamos un Row único: en portrait el panel izquierdo no se renderiza
+                // (weight 0), en landscape tiene weight 0.33f. Así evitamos duplicar
+                // el contenido del LazyColumn.
+                val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+                Row(Modifier.fillMaxSize()) {
+                    if (isLandscape) {
+                        // Panel izquierdo: playlists en vertical (scroll independiente)
+                        LazyColumn(
+                            modifier = Modifier
+                                .weight(0.33f)
+                                .fillMaxHeight()
+                                .padding(end = 4.dp)
+                        ) {
+                            item {
+                                Text(
+                                    t("your_lists"),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(16.dp, 16.dp, 8.dp, 8.dp)
+                                )
+                            }
+                            items(sortedPlaylists, key = { "side_pl_${it.id}" }) { pl ->
+                                PlaylistCard(
+                                    playlist = pl,
+                                    isPlaying = playingPlaylistIds.contains(pl.id),
+                                    onClick = { onOpenPlaylist(pl.id) }
+                                )
+                            }
+                        }
+                    }
+                    // Panel derecho (o único en portrait): contenido actual
+                    ScrollbarLazyColumn(
+                        modifier = if (isLandscape) Modifier.weight(0.67f).fillMaxHeight() else Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = 96.dp)
+                    ) {
                 item {
                     // #2 Header horizontal: portada IZQ + titulo + count DER + chevron
                     // #1 Tap expande/colapsa la lista completa de canciones para limpiar la home.
@@ -555,6 +593,7 @@ fun LibraryScreen(
                         )
                     }
                 }
+                } // CRITICAL (v2.5.30): cierre del Row (landscape layout)
             }
         }
     }
