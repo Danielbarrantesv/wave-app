@@ -39,7 +39,11 @@ data class PlaybackState(
     val hasNext: Boolean = false,
     val hasPrev: Boolean = false,
     val shuffle: Boolean = false,
-    val repeatOne: Boolean = false
+    val repeatOne: Boolean = false,
+    // CRITICAL (v2.5.30): repeatAll — cuando termina la cola, vuelve al inicio.
+    // ExoPlayer lo maneja nativamente con REPEAT_MODE_ALL. También funciona
+    // con shuffle: al terminar la cola shuffle, reconstruye el orden y vuelve.
+    val repeatAll: Boolean = false
 )
 
 object PlaybackController {
@@ -162,7 +166,7 @@ object PlaybackController {
                     _state.value = _state.value.copy(shuffle = shuffleModeEnabled)
                 }
                 override fun onRepeatModeChanged(repeatMode: Int) {
-                    _state.value = _state.value.copy(repeatOne = repeatMode == Player.REPEAT_MODE_ONE)
+                    _state.value = _state.value.copy(repeatOne = repeatMode == Player.REPEAT_MODE_ONE, repeatAll = repeatMode == Player.REPEAT_MODE_ALL)
                 }
                 override fun onPlayerError(error: PlaybackException) {
                     // CRITICAL FIX (loop infinito tras restart): clasificar el error
@@ -271,7 +275,8 @@ object PlaybackController {
                 hasNext = p.hasNextMediaItem(),
                 hasPrev = p.hasPreviousMediaItem(),
                 shuffle = p.shuffleModeEnabled,
-                repeatOne = p.repeatMode == Player.REPEAT_MODE_ONE
+                repeatOne = p.repeatMode == Player.REPEAT_MODE_ONE,
+                repeatAll = p.repeatMode == Player.REPEAT_MODE_ALL
             )
             // EQ attach ahora se hace via Player.Listener.onAudioSessionIdChanged (ver connect()).
             // Ya no hacemos polling aquí.
@@ -794,6 +799,45 @@ object PlaybackController {
         try {
             val p = ensureConnected() ?: return
             p.repeatMode = if (enabled) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
+            refreshState()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            try { player?.release() } catch (_: Exception) {}
+            player = null
+        }
+    }
+
+    /**
+     * CRITICAL (v2.5.30): setea repeat ALL — cuando termina la cola, vuelve al
+     * inicio automáticamente. ExoPlayer lo maneja nativamente con
+     * REPEAT_MODE_ALL. También funciona con shuffle.
+     */
+    fun setRepeatAll(enabled: Boolean) {
+        try {
+            val p = ensureConnected() ?: return
+            p.repeatMode = if (enabled) Player.REPEAT_MODE_ALL else Player.REPEAT_MODE_OFF
+            refreshState()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            try { player?.release() } catch (_: Exception) {}
+            player = null
+        }
+    }
+
+    /**
+     * CRITICAL (v2.5.30): cicla el repeat mode entre OFF → ONE → ALL → OFF.
+     * Esto permite que el botón repeat en la UI cicle entre los 3 estados con
+     * un solo botón, en lugar de tener botones separados para ONE y ALL.
+     */
+    fun cycleRepeatMode() {
+        try {
+            val p = ensureConnected() ?: return
+            p.repeatMode = when (p.repeatMode) {
+                Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ONE
+                Player.REPEAT_MODE_ONE -> Player.REPEAT_MODE_ALL
+                Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_OFF
+                else -> Player.REPEAT_MODE_ONE
+            }
             refreshState()
         } catch (e: Exception) {
             e.printStackTrace()
