@@ -547,7 +547,7 @@ fun LibraryScreen(
                     } else {
                         // CRITICAL (v2.5.32): soporte para vista lista o cuadrícula
                         if (viewMode == ViewMode.GRID) {
-                            items(songs.chunked(3), key = { group -> "grid_${group.first().id}" }) { group ->
+                            items(songs.chunked(if (isLandscape) 4 else 3), key = { group -> "grid_${group.first().id}" }) { group ->
                                 Row(
                                     modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
                                     horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -556,10 +556,12 @@ fun LibraryScreen(
                                         SongGridCard(
                                             song = song,
                                             onClick = { vm.play(song) },
-                                            modifier = Modifier.weight(1f)
+                                            modifier = Modifier.weight(1f),
+                                            isPlaying = song.id == playbackState.playlist.getOrNull(playbackState.currentWindow)?.id,
+                                            artSize = if (isLandscape) 80.dp else 100.dp
                                         )
                                     }
-                                    repeat(3 - group.size) { Spacer(Modifier.weight(1f)) }
+                                    repeat((if (isLandscape) 4 else 3) - group.size) { Spacer(Modifier.weight(1f)) }
                                 }
                             }
                         } else {
@@ -1597,20 +1599,47 @@ private fun ArtistCard(
 // CRITICAL (v2.5.32): enum para toggle vista lista/cuadrícula
 enum class ViewMode { LIST, GRID }
 
-// CRITICAL (v2.5.32): card para vista de cuadrícula — portada + título + artista
+// CRITICAL (v2.5.35): card para vista de cuadrícula — diseño mejorado con:
+// - Borde redondeado (Surface shape)
+// - Sombra ligera (tonalElevation)
+// - Borde del color primario + título bold cuando la canción está sonando
+// - Tamaños adaptables (artSize param para landscape)
 @Composable
-private fun SongGridCard(song: Song, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun SongGridCard(
+    song: Song,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    isPlaying: Boolean = false,
+    artSize: androidx.compose.ui.unit.Dp = 100.dp
+) {
     Column(
         modifier = modifier
             .padding(4.dp)
             .clickable { onClick() },
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        AlbumArt(song = song, size = 100.dp)
-        Spacer(Modifier.height(4.dp))
+        // CRITICAL (v2.5.35): portada con borde redondeado + sombra + borde primario si sonando
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            tonalElevation = if (isPlaying) 4.dp else 1.dp,
+            modifier = Modifier.then(
+                if (isPlaying) Modifier.border(
+                    width = 2.dp,
+                    color = MaterialTheme.colorScheme.primary,
+                    shape = RoundedCornerShape(8.dp)
+                ) else Modifier
+            )
+        ) {
+            AlbumArt(song = song, size = artSize)
+        }
+        Spacer(Modifier.height(6.dp))
         Text(
             song.displayTitle,
-            style = MaterialTheme.typography.bodySmall,
+            style = MaterialTheme.typography.bodySmall.copy(
+                fontWeight = if (isPlaying) FontWeight.Bold else FontWeight.Normal
+            ),
+            color = if (isPlaying) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center
@@ -1618,7 +1647,8 @@ private fun SongGridCard(song: Song, onClick: () -> Unit, modifier: Modifier = M
         Text(
             song.displayArtist,
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = if (isPlaying) MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center
