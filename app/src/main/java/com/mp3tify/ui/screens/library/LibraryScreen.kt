@@ -31,6 +31,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -40,11 +42,13 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LibraryMusic
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.QueueMusic
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shuffle
@@ -158,6 +162,11 @@ fun LibraryScreen(
 
     var showNewPlaylistDialog by remember { mutableStateOf(false) }
     var showAddToPlaylistDialog by remember { mutableStateOf(false) }
+    // CRITICAL (v2.5.32): estado para toggle vista lista/cuadrícula y sleep timer
+    var viewMode by remember { mutableStateOf(ViewMode.LIST) }
+    var showSleepTimerDialog by remember { mutableStateOf(false) }
+    var sleepTimerMinutes by remember { mutableStateOf(0) } // 0 = desactivado
+    var sleepTimerJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     var songForAddToPlaylist by remember { mutableStateOf<Song?>(null) }
     var songToEdit by remember { mutableStateOf<Song?>(null) }
     var songToDelete by remember { mutableStateOf<Song?>(null) }
@@ -501,39 +510,94 @@ fun LibraryScreen(
                             EmptyStateCard(onAddMusic = { showAddMusicDialog = true })
                         }
                     } else {
-                        items(songs, key = { it.id }) { song ->
-                            val isSelected = selectedIds.contains(song.id)
-                            Box(
-                                Modifier.background(
-                                    if (isSelected) {
-                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                                    } else {
-                                        Color.Transparent
+                        // CRITICAL (v2.5.32): soporte para vista lista o cuadrícula
+                        if (viewMode == ViewMode.GRID) {
+                            items(songs.chunked(2), key = { pair -> "grid_${pair.first().id}" }) { pair ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    pair.forEach { song ->
+                                        SongGridCard(
+                                            song = song,
+                                            onClick = { vm.play(song) },
+                                            modifier = Modifier.weight(1f)
+                                        )
                                     }
-                                )
-                            ) {
-                                SongRow(
-                                    song = song,
-                                    onClick = {
-                                        if (selectionMode) {
-                                            vm.toggleSelected(song.id)
+                                    if (pair.size == 1) Spacer(Modifier.weight(1f))
+                                }
+                            }
+                        } else {
+                            items(songs, key = { it.id }) { song ->
+                                val isSelected = selectedIds.contains(song.id)
+                                Box(
+                                    Modifier.background(
+                                        if (isSelected) {
+                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
                                         } else {
-                                            vm.play(song)
+                                            Color.Transparent
                                         }
+                                    )
+                                ) {
+                                    SongRow(
+                                        song = song,
+                                        onClick = {
+                                            if (selectionMode) {
+                                                vm.toggleSelected(song.id)
+                                            } else {
+                                                vm.play(song)
+                                            }
+                                        },
+                                        onLongClick = { vm.toggleSelected(song.id) },
+                                    onToggleFavorite = { vm.toggleFavorite(song) },
+                                    onAddToPlaylist = {
+                                        songForAddToPlaylist = song
+                                        showAddToPlaylistDialog = true
                                     },
-                                    onLongClick = { vm.toggleSelected(song.id) },
-                                onToggleFavorite = { vm.toggleFavorite(song) },
-                                onAddToPlaylist = {
-                                    songForAddToPlaylist = song
-                                    showAddToPlaylistDialog = true
-                                },
-                                onEditInfo = { songToEdit = song },
-                                onDelete = { songToDelete = song }
-                            )
+                                    onEditInfo = { songToEdit = song },
+                                    onDelete = { songToDelete = song }
+                                )
+                            }
+                        }
                         }
                     }
                 }
                 } // closes if (libraryExpanded)
+                // CRITICAL (v2.5.32): toolbar con cantidad de canciones + toggle vista + sleep timer
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "${songs.size} canciones",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f)
+                        )
+                        // Toggle vista lista/cuadrícula
+                        IconButton(onClick = {
+                            viewMode = if (viewMode == ViewMode.LIST) ViewMode.GRID else ViewMode.LIST
+                        }) {
+                            Icon(
+                                if (viewMode == ViewMode.LIST) Icons.Filled.Apps else Icons.Filled.List,
+                                contentDescription = if (viewMode == ViewMode.LIST) "Vista cuadrícula" else "Vista lista",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        // Sleep timer
+                        IconButton(onClick = { showSleepTimerDialog = true }) {
+                            Icon(
+                                Icons.Filled.Schedule,
+                                contentDescription = "Temporizador de sueño",
+                                tint = if (sleepTimerMinutes > 0) MaterialTheme.colorScheme.primary
+                                       else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
             }
                 } // closes Column added for fixed SelectionBanner
         }
@@ -736,6 +800,46 @@ fun LibraryScreen(
                 showAddToPlaylistDialog = false
                 songForAddToPlaylist = null
             }
+        )
+    }
+
+    // CRITICAL (v2.5.32): diálogo de sleep timer — 15/30/45/60/90 minutos
+    if (showSleepTimerDialog) {
+        AlertDialog(
+            onDismissRequest = { showSleepTimerDialog = false },
+            title = { Text("Temporizador de sueño") },
+            text = {
+                Column {
+                    listOf(15, 30, 45, 60, 90).forEach { minutes ->
+                        TextButton(
+                            onClick = {
+                                sleepTimerJob?.cancel()
+                                sleepTimerMinutes = minutes
+                                showSleepTimerDialog = false
+                                sleepTimerJob = scope.launch {
+                                    kotlinx.coroutines.delay(minutes * 60_000L)
+                                    PlaybackController.pause()
+                                    sleepTimerMinutes = 0
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("$minutes minutos") }
+                    }
+                    if (sleepTimerMinutes > 0) {
+                        Spacer(Modifier.height(8.dp))
+                        TextButton(
+                            onClick = {
+                                sleepTimerJob?.cancel()
+                                sleepTimerMinutes = 0
+                                showSleepTimerDialog = false
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Cancelar temporizador") }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { showSleepTimerDialog = false }) { Text(t("close")) } }
         )
     }
 
@@ -1485,6 +1589,39 @@ private fun ArtistCard(
             maxLines = 1,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+
+// CRITICAL (v2.5.32): enum para toggle vista lista/cuadrícula
+enum class ViewMode { LIST, GRID }
+
+// CRITICAL (v2.5.32): card para vista de cuadrícula — portada + título + artista
+@Composable
+private fun SongGridCard(song: Song, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .padding(4.dp)
+            .clickable { onClick() },
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        AlbumArt(song = song, size = 120.dp)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            song.displayTitle,
+            style = MaterialTheme.typography.bodySmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center
+        )
+        Text(
+            song.displayArtist,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center
         )
     }
 }
