@@ -272,6 +272,36 @@ fun PlaylistScreen(
                     )
                 }
 
+                // CRITICAL (v2.5.36): toolbar fija con toggle vista lista/grid + sleep timer
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "${songs.size} canciones",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(onClick = { isGridView = !isGridView }) {
+                        Icon(
+                            if (isGridView) Icons.Filled.List else Icons.Filled.Apps,
+                            contentDescription = if (isGridView) "Vista lista" else "Vista cuadrícula",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    IconButton(onClick = { showSleepTimerDialog = true }) {
+                        Icon(
+                            Icons.Filled.Schedule,
+                            contentDescription = "Temporizador de sueño",
+                            tint = if (sleepTimerMinutes > 0) MaterialTheme.colorScheme.primary
+                                   else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
                 ScrollbarLazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(bottom = 96.dp)
@@ -387,6 +417,25 @@ fun PlaylistScreen(
                         )
                     }
                 } else {
+                    // CRITICAL (v2.5.36): soporte para vista lista o cuadrícula
+                    if (isGridView) {
+                        items(songs.chunked(3), key = { group -> "grid_${group.first().id}" }) { group ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                group.forEach { song ->
+                                    PlaylistSongGridCard(
+                                        song = song,
+                                        onClick = { vm.play(song) },
+                                        modifier = Modifier.weight(1f),
+                                        isPlaying = song.id == playbackState.playlist.getOrNull(playbackState.currentWindow)?.id
+                                    )
+                                }
+                                repeat(3 - group.size) { Spacer(Modifier.weight(1f)) }
+                            }
+                        }
+                    } else {
                     items(songs, key = { it.id }) { song ->
                         val isSelected = selectedIds.contains(song.id)
                         Box(
@@ -409,6 +458,7 @@ fun PlaylistScreen(
                                 },
                                 onLongClick = { vm.toggleSelected(song.id) },
                                 onToggleFavorite = { vm.toggleFavorite(song) },
+                                isPlaying = song.id == playbackState.playlist.getOrNull(playbackState.currentWindow)?.id,
                                 // #2 FIX: onAddToPlaylist y onEditInfo estaban vacios ({ }).
                                 // Ahora abren los mismos dialogs que LibraryScreen.
                                 onAddToPlaylist = {
@@ -420,6 +470,7 @@ fun PlaylistScreen(
                             )
                         }
                     }
+                    } // closes else (isGridView)
                 }
                 }
             }
@@ -682,6 +733,46 @@ fun PlaylistScreen(
             }
         )
     }
+
+    // CRITICAL (v2.5.36): diálogo de sleep timer — 15/30/45/60/90 minutos
+    if (showSleepTimerDialog) {
+        AlertDialog(
+            onDismissRequest = { showSleepTimerDialog = false },
+            title = { Text("Temporizador de sueño") },
+            text = {
+                Column {
+                    listOf(15, 30, 45, 60, 90).forEach { minutes ->
+                        TextButton(
+                            onClick = {
+                                sleepTimerJob?.cancel()
+                                sleepTimerMinutes = minutes
+                                showSleepTimerDialog = false
+                                sleepTimerJob = scope.launch {
+                                    kotlinx.coroutines.delay(minutes * 60_000L)
+                                    PlaybackController.pause()
+                                    sleepTimerMinutes = 0
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("$minutes minutos") }
+                    }
+                    if (sleepTimerMinutes > 0) {
+                        Spacer(Modifier.height(8.dp))
+                        TextButton(
+                            onClick = {
+                                sleepTimerJob?.cancel()
+                                sleepTimerMinutes = 0
+                                showSleepTimerDialog = false
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Cancelar temporizador") }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { showSleepTimerDialog = false }) { Text(t("close")) } }
+        )
+    }
 }
 
 /**
@@ -769,5 +860,40 @@ private fun PlaylistSelectionBanner(
                 )
             }
         }
+    }
+}
+
+// CRITICAL (v2.5.36): SongGridCard para PlaylistScreen — diseño simple con efecto sonando
+@Composable
+private fun PlaylistSongGridCard(
+    song: com.mp3tify.data.model.Song,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    isPlaying: Boolean = false
+) {
+    Column(
+        modifier = modifier
+            .padding(4.dp)
+            .clickable { onClick() },
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        com.mp3tify.ui.components.AlbumArt(song = song, size = 100.dp)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            song.displayTitle,
+            style = MaterialTheme.typography.bodySmall,
+            color = if (isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center
+        )
+        Text(
+            song.displayArtist,
+            style = MaterialTheme.typography.bodySmall,
+            color = if (isPlaying) MaterialTheme.colorScheme.primary.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center
+        )
     }
 }

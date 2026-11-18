@@ -587,6 +587,7 @@ fun LibraryScreen(
                                         },
                                         onLongClick = { vm.toggleSelected(song.id) },
                                     onToggleFavorite = { vm.toggleFavorite(song) },
+                                    isPlaying = song.id == playbackState.playlist.getOrNull(playbackState.currentWindow)?.id,
                                     onAddToPlaylist = {
                                         songForAddToPlaylist = song
                                         showAddToPlaylistDialog = true
