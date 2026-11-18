@@ -305,6 +305,41 @@ fun LibraryScreen(
                 // Usamos un Row único: en portrait el panel izquierdo no se renderiza
                 // (weight 0), en landscape tiene weight 0.33f. Así evitamos duplicar
                 // el contenido del LazyColumn.
+                // CRITICAL (v2.5.34): toolbar FIJA arriba — siempre visible aunque se haga scroll.
+                // Contiene: cantidad de canciones (izquierda) + toggle vista lista/grid + sleep timer.
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "${songs.size} canciones",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    )
+                    // Toggle vista lista/cuadrícula
+                    IconButton(onClick = {
+                        viewMode = if (viewMode == ViewMode.LIST) ViewMode.GRID else ViewMode.LIST
+                    }) {
+                        Icon(
+                            if (viewMode == ViewMode.LIST) Icons.Filled.Apps else Icons.Filled.List,
+                            contentDescription = if (viewMode == ViewMode.LIST) "Vista cuadrícula" else "Vista lista",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    // Sleep timer
+                    IconButton(onClick = { showSleepTimerDialog = true }) {
+                        Icon(
+                            Icons.Filled.Schedule,
+                            contentDescription = "Temporizador de sueño",
+                            tint = if (sleepTimerMinutes > 0) MaterialTheme.colorScheme.primary
+                                   else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
                 val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
                 Row(Modifier.weight(1f).fillMaxWidth()) {
@@ -512,19 +547,19 @@ fun LibraryScreen(
                     } else {
                         // CRITICAL (v2.5.32): soporte para vista lista o cuadrícula
                         if (viewMode == ViewMode.GRID) {
-                            items(songs.chunked(2), key = { pair -> "grid_${pair.first().id}" }) { pair ->
+                            items(songs.chunked(3), key = { group -> "grid_${group.first().id}" }) { group ->
                                 Row(
-                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
-                                    pair.forEach { song ->
+                                    group.forEach { song ->
                                         SongGridCard(
                                             song = song,
                                             onClick = { vm.play(song) },
                                             modifier = Modifier.weight(1f)
                                         )
                                     }
-                                    if (pair.size == 1) Spacer(Modifier.weight(1f))
+                                    repeat(3 - group.size) { Spacer(Modifier.weight(1f)) }
                                 }
                             }
                         } else {
@@ -562,41 +597,7 @@ fun LibraryScreen(
                         }
                     }
                 }
-                // CRITICAL (v2.5.32): toolbar con cantidad de canciones + toggle vista + sleep timer
-                item {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            "${songs.size} canciones",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.weight(1f)
-                        )
-                        // Toggle vista lista/cuadrícula
-                        IconButton(onClick = {
-                            viewMode = if (viewMode == ViewMode.LIST) ViewMode.GRID else ViewMode.LIST
-                        }) {
-                            Icon(
-                                if (viewMode == ViewMode.LIST) Icons.Filled.Apps else Icons.Filled.List,
-                                contentDescription = if (viewMode == ViewMode.LIST) "Vista cuadrícula" else "Vista lista",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        // Sleep timer
-                        IconButton(onClick = { showSleepTimerDialog = true }) {
-                            Icon(
-                                Icons.Filled.Schedule,
-                                contentDescription = "Temporizador de sueño",
-                                tint = if (sleepTimerMinutes > 0) MaterialTheme.colorScheme.primary
-                                       else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
+                // CRITICAL (v2.5.34): toolbar movida arriba (fija) antes del LazyColumn
             }
                 } // closes Column added for fixed SelectionBanner
         }
@@ -1605,7 +1606,7 @@ private fun SongGridCard(song: Song, onClick: () -> Unit, modifier: Modifier = M
             .clickable { onClick() },
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        AlbumArt(song = song, size = 120.dp)
+        AlbumArt(song = song, size = 100.dp)
         Spacer(Modifier.height(4.dp))
         Text(
             song.displayTitle,

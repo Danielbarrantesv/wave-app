@@ -184,7 +184,7 @@ fun PlaylistScreen(
                                 onDismissRequest = { menuOpen = false }
                             ) {
                                 DropdownMenuItem(
-                                    text = { Text(t("add_music")) },
+                                    text = { Text(t("add_music_short")) },
                                     onClick = {
                                         menuOpen = false
                                         try { filesPicker.launch("audio/*") } catch (e: Exception) { e.printStackTrace() }
@@ -192,7 +192,7 @@ fun PlaylistScreen(
                                     leadingIcon = { Icon(Icons.Filled.MusicNote, contentDescription = null) }
                                 )
                                 DropdownMenuItem(
-                                    text = { Text(t("add_folder")) },
+                                    text = { Text("Carpeta") },
                                     onClick = {
                                         menuOpen = false
                                         folderPicker.launch(null)
@@ -303,13 +303,13 @@ fun PlaylistScreen(
                             }) {
                                 Icon(Icons.Filled.MusicNote, contentDescription = null)
                                 Spacer(Modifier.width(6.dp))
-                                Text(t("add_music"))
+                                Text(t("add_music_short"))
                             }
                             Spacer(Modifier.width(12.dp))
                             OutlinedButton(onClick = { folderPicker.launch(null) }) {
                                 Icon(Icons.Filled.LibraryMusic, contentDescription = null)
                                 Spacer(Modifier.width(6.dp))
-                                Text(t("add_folder"))
+                                Text("Carpeta")
                             }
                         }
                         // #3 Sort filter en playlist: 5 opciones (Añadidas/Reproducidas/Título/Artista/Duración)
