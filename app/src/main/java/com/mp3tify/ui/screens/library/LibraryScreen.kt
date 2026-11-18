@@ -562,7 +562,6 @@ fun LibraryScreen(
                         }
                     }
                 }
-                } // closes if (libraryExpanded)
                 // CRITICAL (v2.5.32): toolbar con cantidad de canciones + toggle vista + sleep timer
                 item {
                     Row(
