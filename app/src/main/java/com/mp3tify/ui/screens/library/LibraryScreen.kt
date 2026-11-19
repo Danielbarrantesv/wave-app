@@ -4,6 +4,7 @@ import android.content.Intent
 import android.content.res.Configuration
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -28,6 +29,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -81,6 +83,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -173,7 +176,7 @@ fun LibraryScreen(
     var sortMenuOpen by remember { mutableStateOf(false) }
     // #1 Limpiar pagina principal: la lista completa de canciones esta colapsada
     // por defecto. Tap en el header la expande/colapsa.
-    var libraryExpanded by remember { mutableStateOf(false) }
+    var libraryExpanded by rememberSaveable { mutableStateOf(false) }
 
     fun onImportDone(result: Repository.ImportResult?) {
         scope.launch {
@@ -305,8 +308,18 @@ fun LibraryScreen(
                 // Usamos un Row único: en portrait el panel izquierdo no se renderiza
                 // (weight 0), en landscape tiene weight 0.33f. Así evitamos duplicar
                 // el contenido del LazyColumn.
-                // CRITICAL (v2.5.34): toolbar FIJA arriba — siempre visible aunque se haga scroll.
-                // Contiene: cantidad de canciones (izquierda) + toggle vista lista/grid + sleep timer.
+                // CRITICAL (v2.5.38): toolbar con auto-hide — se esconde al hacer scroll
+                // hacia abajo y aparece al hacer scroll hacia arriba.
+                val scrollState = rememberLazyListState()
+                var prevIndex by remember { mutableStateOf(0) }
+                var isToolbarVisible by remember { mutableStateOf(true) }
+                LaunchedEffect(scrollState.firstVisibleItemIndex) {
+                    val currentIndex = scrollState.firstVisibleItemIndex
+                    if (currentIndex > prevIndex) isToolbarVisible = false
+                    else if (currentIndex < prevIndex) isToolbarVisible = true
+                    prevIndex = currentIndex
+                }
+                AnimatedVisibility(visible = isToolbarVisible) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -338,6 +351,7 @@ fun LibraryScreen(
                                    else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                }
                 }
 
                 val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -371,6 +385,7 @@ fun LibraryScreen(
                     // Panel derecho (o único en portrait): contenido actual
                     ScrollbarLazyColumn(
                         modifier = if (isLandscape) Modifier.weight(0.75f).fillMaxHeight() else Modifier.fillMaxSize(),
+                        state = scrollState,
                         contentPadding = PaddingValues(bottom = 96.dp)
                     ) {
                 item {
@@ -558,7 +573,7 @@ fun LibraryScreen(
                                             onClick = { vm.play(song) },
                                             modifier = Modifier.weight(1f),
                                             isPlaying = song.id == playbackState.playlist.getOrNull(playbackState.currentWindow)?.id,
-                                            artSize = if (isLandscape) 80.dp else 100.dp
+                                            artSize = if (isLandscape) 90.dp else 120.dp
                                         )
                                     }
                                     repeat((if (isLandscape) 4 else 3) - group.size) { Spacer(Modifier.weight(1f)) }
