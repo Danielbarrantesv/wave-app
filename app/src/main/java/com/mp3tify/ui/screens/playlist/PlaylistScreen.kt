@@ -879,7 +879,7 @@ private fun PlaylistSongGridCard(
             .clickable { onClick() },
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        com.mp3tify.ui.components.AlbumArt(song = song, size = 100.dp)
+        com.mp3tify.ui.components.AlbumArt(song = song, size = 120.dp)
         Spacer(Modifier.height(4.dp))
         Text(
             song.displayTitle,
