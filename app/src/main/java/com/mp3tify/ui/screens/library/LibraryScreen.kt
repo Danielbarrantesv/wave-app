@@ -440,7 +440,8 @@ fun LibraryScreen(
                                     song = song,
                                     onClick = {
                                         vm.play(song)
-                                    }
+                                    },
+                                    onLongClick = { songForOptions = song }
                                 )
                             }
                         }
@@ -1100,10 +1101,12 @@ private fun LibraryHeaderRow(
  * RecentlyPlayedCard — tarjeta horizontal compacta para "Escuchadas recientemente".
  * Muestra portada 56dp + titulo + artista. Tap reproduce.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun RecentlyPlayedCard(
     song: Song,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onLongClick: () -> Unit = {}
 ) {
     Column(
         modifier = Modifier
@@ -1618,7 +1621,7 @@ private fun SongGridCard(
     Column(
         modifier = modifier
             .padding(4.dp)
-            .clickable { onClick() },
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // CRITICAL (v2.5.35): portada con borde redondeado + sombra + borde primario si sonando
