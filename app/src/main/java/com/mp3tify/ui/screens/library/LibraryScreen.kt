@@ -189,7 +189,6 @@ fun LibraryScreen(
     LaunchedEffect(allSongsExpanded) {
         if (allSongsExpanded != libraryExpanded) libraryExpanded = allSongsExpanded
     }
-    val context = LocalContext.current
 
     fun onImportDone(result: Repository.ImportResult?) {
         scope.launch {
