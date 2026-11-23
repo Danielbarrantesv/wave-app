@@ -100,15 +100,17 @@ fun PlayerBar(
                         }
                         seekPosition = null
                     },
+                    // CRITICAL (v2.5.39): acortar espacio entre timeline y controles.
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                        .padding(horizontal = 12.dp, vertical = 2.dp)
                 )
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable { onOpenNowPlaying() }
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                        // CRITICAL (v2.5.39): gap reducido de 8dp a 4dp para acercar controles.
+                        .padding(horizontal = 12.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     AlbumArt(song = current, size = 40.dp)

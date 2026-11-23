@@ -83,7 +83,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -102,6 +101,7 @@ import com.mp3tify.data.model.displayArtist
 import com.mp3tify.data.model.displayTitle
 import com.mp3tify.data.repository.Repository
 import com.mp3tify.playback.PlaybackController
+import com.mp3tify.playback.WakeLockManager
 import com.mp3tify.ui.components.AlbumArt
 import com.mp3tify.ui.components.CollageCover
 import com.mp3tify.ui.components.PlayerBar
@@ -111,6 +111,7 @@ import com.mp3tify.ui.components.SongRow
 import com.mp3tify.ui.t
 import com.mp3tify.ui.tf
 import com.mp3tify.ui.viewmodel.LibraryViewModel
+import com.mp3tify.util.Preferences
 import kotlinx.coroutines.launch
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
@@ -167,6 +168,12 @@ fun LibraryScreen(
     var showAddToPlaylistDialog by remember { mutableStateOf(false) }
     // CRITICAL (v2.5.32): estado para toggle vista lista/cuadrícula y sleep timer
     var viewMode by remember { mutableStateOf(ViewMode.LIST) }
+    // CRITICAL (v2.5.39): sincroniza viewMode con DataStore para que sobreviva a reinicios.
+    val libraryViewMode by Preferences.libraryViewModeFlow.collectAsState(initial = ViewMode.LIST.name)
+    LaunchedEffect(libraryViewMode) {
+        val parsed = runCatching { ViewMode.valueOf(libraryViewMode) }.getOrNull() ?: ViewMode.LIST
+        if (parsed != viewMode) viewMode = parsed
+    }
     var showSleepTimerDialog by remember { mutableStateOf(false) }
     var sleepTimerMinutes by remember { mutableStateOf(0) } // 0 = desactivado
     var sleepTimerJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
@@ -176,7 +183,13 @@ fun LibraryScreen(
     var sortMenuOpen by remember { mutableStateOf(false) }
     // #1 Limpiar pagina principal: la lista completa de canciones esta colapsada
     // por defecto. Tap en el header la expande/colapsa.
-    var libraryExpanded by rememberSaveable { mutableStateOf(false) }
+    // CRITICAL (v2.5.39): el estado ahora se persiste en DataStore; por defecto ABIERTA.
+    var libraryExpanded by remember { mutableStateOf(true) }
+    val allSongsExpanded by Preferences.allSongsExpandedFlow.collectAsState(initial = true)
+    LaunchedEffect(allSongsExpanded) {
+        if (allSongsExpanded != libraryExpanded) libraryExpanded = allSongsExpanded
+    }
+    val context = LocalContext.current
 
     fun onImportDone(result: Repository.ImportResult?) {
         scope.launch {
@@ -334,7 +347,10 @@ fun LibraryScreen(
                     )
                     // Toggle vista lista/cuadrícula
                     IconButton(onClick = {
-                        viewMode = if (viewMode == ViewMode.LIST) ViewMode.GRID else ViewMode.LIST
+                        val next = if (viewMode == ViewMode.LIST) ViewMode.GRID else ViewMode.LIST
+                        viewMode = next
+                        // CRITICAL (v2.5.39): persistir en DataStore.
+                        scope.launch { Preferences.setLibraryViewMode(next.name) }
                     }) {
                         Icon(
                             if (viewMode == ViewMode.LIST) Icons.Filled.Apps else Icons.Filled.List,
@@ -397,7 +413,12 @@ fun LibraryScreen(
                     LibraryHeaderRow(
                         songs = songs,
                         expanded = libraryExpanded,
-                        onToggleExpanded = { libraryExpanded = !libraryExpanded },
+                        onToggleExpanded = {
+                            // CRITICAL (v2.5.39): persistir estado abierto/cerrado en DataStore.
+                            val next = !libraryExpanded
+                            libraryExpanded = next
+                            scope.launch { Preferences.setAllSongsExpanded(next) }
+                        },
                         onPlayAll = { vm.playAll(false) },
                         onShuffleAll = { vm.playAll(true) },
                         onSortClick = { sortMenuOpen = true },
@@ -838,6 +859,9 @@ fun LibraryScreen(
                                     kotlinx.coroutines.delay(minutes * 60_000L)
                                     PlaybackController.pause()
                                     sleepTimerMinutes = 0
+                                    // CRITICAL (v2.5.39): apagar pantalla al expirar el timer.
+                                    context.findActivity()?.let { WakeLockManager.turnOffScreen(it) }
+                                    WakeLockManager.lockScreenWithDeviceAdmin(context.applicationContext)
                                 }
                             },
                             modifier = Modifier.fillMaxWidth()
@@ -1670,4 +1694,17 @@ private fun SongGridCard(
             textAlign = TextAlign.Center
         )
     }
+}
+
+/**
+ * CRITICAL (v2.5.39): obtiene la Activity desde un Context para poder llamar
+ * a [WakeLockManager.turnOffScreen] desde el cuerpo del sleep timer job.
+ */
+private fun android.content.Context.findActivity(): android.app.Activity? {
+    var ctx = this
+    while (ctx is android.content.ContextWrapper) {
+        if (ctx is android.app.Activity) return ctx
+        ctx = ctx.baseContext
+    }
+    return null
 }
