@@ -149,7 +149,7 @@ object PlaybackController {
             p.addListener(object : Player.Listener {
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
                     refreshState()
-                    if (isPlaying) startPolling() else stopPolling()
+                    if (isPlaying) { ensureServiceRunning(true); startPolling() } else stopPolling()
                 }
                 override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                     refreshState()
@@ -410,20 +410,36 @@ object PlaybackController {
      *  - el archivo no existe (portada perdida tras reinstalar)
      *  - FileProvider falla
      */
+    private fun ensureServiceRunning(refreshNotification: Boolean = false) {
+        val ctx = appCtx ?: return
+        try {
+            val intent = Intent(ctx, MediaPlaybackService::class.java).apply {
+                if (refreshNotification) action = MediaPlaybackService.ACTION_REFRESH_NOTIFICATION
+            }
+            try { ctx.startService(intent) } catch (_: IllegalStateException) {
+                if (player?.playWhenReady == true) androidx.core.content.ContextCompat.startForegroundService(ctx, intent)
+            }
+        } catch (e: Exception) { e.printStackTrace() }
+    }
+
+    fun refreshMediaNotification() {
+        val p = player ?: return
+        if (p.mediaItemCount > 0) ensureServiceRunning(true)
+    }
+
     private fun toArtworkUri(song: Song): android.net.Uri? {
         val artPath = song.artUri?.takeIf { it.isNotBlank() } ?: return null
+        if (artPath.startsWith("content://") || artPath.startsWith("file://")) {
+            return try { android.net.Uri.parse(artPath) } catch (_: Exception) { null }
+        }
         val artFile = File(artPath)
         if (!artFile.exists()) return null
         return try {
-            androidx.core.content.FileProvider.getUriForFile(
-                appCtx!!,
-                "${appCtx!!.packageName}.artwork",
-                artFile
-            )
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
-        }
+            val ctx = appCtx ?: return null
+            val uri = androidx.core.content.FileProvider.getUriForFile(ctx, "${ctx.packageName}.artwork", artFile)
+            try { ctx.grantUriPermission("com.android.systemui", uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
+            uri
+        } catch (e: Exception) { e.printStackTrace(); null }
     }
 
     fun setQueue(songs: List<Song>, startIndex: Int) {
@@ -460,6 +476,7 @@ object PlaybackController {
                     p.setMediaItems(items, safeIndex, 0L)
                     p.prepare()
                     p.play()
+                    ensureServiceRunning(true)
                     refreshState()
                 }
             } catch (e: Exception) {
@@ -682,6 +699,7 @@ object PlaybackController {
                 }
             }
             p.play()
+            ensureServiceRunning(true)
             refreshState()
             // CRITICAL FIX: si despues de play() el player sigue sin reproducir y esta
             // en STATE_IDLE con media items, esta zombie. Liberar, reconectar, restaurar

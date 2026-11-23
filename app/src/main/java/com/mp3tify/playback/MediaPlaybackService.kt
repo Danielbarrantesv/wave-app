@@ -1,29 +1,28 @@
 package com.mp3tify.playback
 
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
 import android.os.Build
+import androidx.annotation.OptIn
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.mp3tify.MainActivity
+import com.mp3tify.R
 
-/**
- * MediaSessionService — exposes the PlaybackController's ExoPlayer to the system
- * (notification, Bluetooth/steering-wheel buttons, Android Auto, Assistant).
- *
- * CRITICAL FIX (botones volante mueren tras inactividad): onGetSession ahora
- * verifies that the shared player is still alive on every controller connection.
- * If the player was released by the system after a long idle period, we discard
- * the stale MediaSession, ask PlaybackController to reconnect (creates a fresh
- * ExoPlayer), and build a new MediaSession wrapping the fresh player. Before
- * this fix, the MediaSession kept pointing at a released player and the car's
- * SKIP/PREV buttons were no-ops until the user opened the app and forced a
- * reconnect from the UI.
- */
+@OptIn(UnstableApi::class)
 class MediaPlaybackService : MediaSessionService() {
+
+    companion object {
+        const val CHANNEL_ID = "mp3tify_playback"
+        const val NOTIFICATION_ID = 1001
+        const val ACTION_REFRESH_NOTIFICATION = "com.mp3tify.ACTION_REFRESH_NOTIFICATION"
+    }
 
     private var mediaSession: MediaSession? = null
 
@@ -31,147 +30,81 @@ class MediaPlaybackService : MediaSessionService() {
         super.onCreate()
         try {
             createChannel()
+            val provider = DefaultMediaNotificationProvider.Builder(this)
+                .setChannelId(CHANNEL_ID)
+                .setChannelName(R.string.notification_channel_name)
+                .setNotificationId(NOTIFICATION_ID)
+                .build().apply { setSmallIcon(R.drawable.ic_wave_notification) }
+            setMediaNotificationProvider(provider)
+
             PlaybackController.connect(applicationContext)
-            // #3 Optimización segundo plano: acquire PARTIAL_WAKE_LOCK desde el service
-            // para que el CPU no se duerma durante playback en background, incluso si
-            // la Activity no está visible. Esto previene que el ExoPlayer se congele
-            // tras un rato de uso en background.
             WakeLockManager.acquirePartialWakeLock(applicationContext)
-            val player = PlaybackController.playerOrNull()
-            if (player != null) {
-                // #2 MediaStyle notification: set session activity so tapping the
-                // notification card (in quick settings dropdown / Dynamic Island)
-                // opens the app's MainActivity. Without this, tapping the notification
-                // does nothing or opens the system's media control center.
-                val sessionIntent = Intent(this, MainActivity::class.java).apply {
-                    flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                }
-                val pendingIntent = PendingIntent.getActivity(
-                    this,
-                    0,
-                    sessionIntent,
-                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-                )
-                mediaSession = MediaSession.Builder(this, player)
-                    .setSessionActivity(pendingIntent)
-                    .build()
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
+            PlaybackController.playerOrNull()?.let { buildOrReplaceSession(it) }
+        } catch (e: Exception) { e.printStackTrace() }
+    }
+
+    private fun buildOrReplaceSession(player: Player): MediaSession {
+        mediaSession?.let { old ->
+            try { removeSession(old) } catch (_: Exception) {}
+            try { old.release() } catch (_: Exception) {}
+            mediaSession = null
         }
+        val pi = PendingIntent.getActivity(
+            this, 0,
+            Intent(this, MainActivity::class.java).apply {
+                setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            },
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        return MediaSession.Builder(this, player).setSessionActivity(pi).build().also { mediaSession = it }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // CRITICAL (#3 playback resilience): START_STICKY para que el system reintente
-        // el service si lo mata por memory pressure. Sin esto, cuando el system mata
-        // el MediaPlaybackService (tras un rato de inactividad), el service NO se
-        // recrea y el MediaSession desaparece del MediaSessionManager → no hay
-        // notification, no hay Dynamic Island, y la próxima vez que el usuario abre
-        // Wave y le da play, setQueue llama a un player que el system ya liberó.
-        // Con START_STICKY, Android recrea el service (con intent=null) y
-        // onCreate vuelve a conectar el PlaybackController + crear MediaSession.
         super.onStartCommand(intent, flags, startId)
-        // CRITICAL (#3): si el service ya estaba corriendo (onCreate no se llama de
-        // nuevo) pero PlaybackController reconectó con un player NUEVO (porque el
-        // viejo fue liberado), el MediaSession actual apunta al player muerto.
-        // Detectar esto y reconstruir el session sobre el player vivo.
         try {
-            val session = mediaSession
-            val sessionPlayer = session?.player
-            val currentControllerPlayer = PlaybackController.playerOrNull()
-            if (sessionPlayer != null && currentControllerPlayer != null && sessionPlayer !== currentControllerPlayer) {
-                android.util.Log.w("MediaPlaybackService", "onStartCommand: MediaSession player != PlaybackController player, rebuilding session")
-                try { session.release() } catch (_: Exception) {}
-                mediaSession = null
-                // NOTA: usar setFlags() en lugar de `flags = ...` dentro del apply
-                // porque el param `flags: Int` de onStartCommand le hace shadow al
-                // Intent.flags property dentro del lambda.
-                val sessionIntent = Intent(this, MainActivity::class.java).apply {
-                    setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                }
-                val pendingIntent = PendingIntent.getActivity(
-                    this, 0, sessionIntent,
-                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-                )
-                mediaSession = MediaSession.Builder(this, currentControllerPlayer)
-                    .setSessionActivity(pendingIntent)
-                    .build()
+            val cur = PlaybackController.playerOrNull()
+            val s = if (cur != null && (mediaSession == null || mediaSession?.player !== cur)) {
+                buildOrReplaceSession(cur)
+            } else mediaSession
+            if (s != null && s.player.mediaItemCount > 0 &&
+                (s.player.playWhenReady || intent?.action == ACTION_REFRESH_NOTIFICATION)
+            ) {
+                onUpdateNotification(s, s.player.playWhenReady)
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+        } catch (e: Exception) { e.printStackTrace() }
         return START_STICKY
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
-        // CRITICAL FIX (botones volante mueren): on every controller connect
-        // (car, notification, Assistant), probe the player. If it's released,
-        // rebuild the session so the buttons drive a live player.
-        val session = mediaSession
-        val player = session?.player
-        if (player != null) {
-            try {
-                @Suppress("UNUSED_VARIABLE")
-                val state = player.playbackState
-                return session  // alive
-            } catch (e: Exception) {
-                // Player released — discard the stale session and rebuild.
-                try { session.release() } catch (_: Exception) {}
+        val s = mediaSession
+        if (s?.player != null) {
+            try { @Suppress("UNUSED_VARIABLE") val st = s.player.playbackState; return s }
+            catch (_: Exception) {
+                try { removeSession(s) } catch (_: Exception) {}
+                try { s.release() } catch (_: Exception) {}
                 mediaSession = null
             }
         }
-        // Reconnect and rebuild.
         try {
             PlaybackController.connect(applicationContext)
-            val fresh = PlaybackController.playerOrNull()
-            if (fresh != null) {
-                // Re-build session with session activity + notification provider (matching onCreate).
-                val sessionIntent = Intent(this, MainActivity::class.java).apply {
-                    flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                }
-                val pendingIntent = PendingIntent.getActivity(
-                    this,
-                    0,
-                    sessionIntent,
-                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-                )
-                mediaSession = MediaSession.Builder(this, fresh)
-                    .setSessionActivity(pendingIntent)
-                    .build()
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+            PlaybackController.playerOrNull()?.let { return buildOrReplaceSession(it) }
+        } catch (e: Exception) { e.printStackTrace() }
         return mediaSession
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        // CRITICAL FIX (v2.5.12): NO llamar a PlaybackController.stop() aquí —
-        // stop() hace _state.value = PlaybackState() que borra la playlist in-memory.
-        // Tras swipe-out, el usuario espera que al reabrir la app la cola siga ahí
-        // (las canciones se persisten en mp3tify_playback/queue_song_ids desde
-        // setQueue/refreshState, y restoreSavedQueue las recarga desde la DB).
-        // Antes: stop() vaciaba el estado → MainActivity.onCreate llamaba
-        // restoreSavedQueue que intentaba setQueue con URIs SAF que habían perdido
-        // el persistable permission → SecurityException → onPlayerError → loop
-        // infinito de re-apply (4 intents en 2 segundos, log v2.5.11).
-        // Ahora: solo pausar y limpiar media items del player (la cola en prefs
-        // sigue siendo la fuente de truth para el próximo arranque).
-        try {
-            val p = PlaybackController.playerOrNull()
-            if (p != null) {
-                p.pause()
-                p.clearMediaItems()
-            }
-        } catch (e: Exception) { e.printStackTrace() }
+        try { PlaybackController.playerOrNull()?.let { it.pause(); it.clearMediaItems() } }
+        catch (e: Exception) { e.printStackTrace() }
         stopSelf()
         super.onTaskRemoved(rootIntent)
     }
 
     override fun onDestroy() {
-        try { mediaSession?.release() } catch (e: Exception) { e.printStackTrace() }
+        mediaSession?.let {
+            try { removeSession(it) } catch (_: Exception) {}
+            try { it.release() } catch (e: Exception) { e.printStackTrace() }
+        }
         mediaSession = null
-        // #3 Liberar el wakelock al destruir el service para no leakar recursos.
         try { WakeLockManager.releasePartialWakeLock() } catch (e: Exception) { e.printStackTrace() }
         super.onDestroy()
     }
@@ -179,14 +112,15 @@ class MediaPlaybackService : MediaSessionService() {
     private fun createChannel() {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val channel = NotificationChannel(
-                    "mp3tify_playback",
-                    getString(com.mp3tify.R.string.notification_channel_name),
+                val ch = NotificationChannel(
+                    CHANNEL_ID, getString(R.string.notification_channel_name),
                     NotificationManager.IMPORTANCE_LOW
-                )
-                channel.description = getString(com.mp3tify.R.string.notification_channel_desc)
-                val nm = getSystemService(NotificationManager::class.java)
-                nm.createNotificationChannel(channel)
+                ).apply {
+                    description = getString(R.string.notification_channel_desc)
+                    setShowBadge(false); enableVibration(false); setSound(null, null)
+                    lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                }
+                getSystemService(NotificationManager::class.java).createNotificationChannel(ch)
             }
         } catch (e: Exception) { e.printStackTrace() }
     }
