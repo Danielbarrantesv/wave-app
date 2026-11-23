@@ -38,7 +38,7 @@ import androidx.compose.ui.unit.dp
 import com.mp3tify.data.model.Song
 import com.mp3tify.data.repository.Repository
 import com.mp3tify.playback.PlaybackController
-import com.mp3tify.ui.components.PlayerBar
+import com.mp3tify.ui.components.LivePlayerBar
 import com.mp3tify.ui.components.ScrollbarLazyColumn
 import com.mp3tify.ui.components.SongRow
 import com.mp3tify.ui.t
@@ -58,7 +58,6 @@ fun SearchScreen(
     var results by remember { mutableStateOf<List<Song>>(emptyList()) }
     var searched by remember { mutableStateOf(false) }
 
-    val playbackState by PlaybackController.state.collectAsState()
 
     // CRITICAL FIX: 250ms debounce — typing does not hammer the database.
     LaunchedEffect(query) {
@@ -102,7 +101,7 @@ fun SearchScreen(
             )
         },
         bottomBar = {
-            PlayerBar(state = playbackState, onOpenNowPlaying = onOpenNowPlaying)
+            LivePlayerBar(onOpenNowPlaying = onOpenNowPlaying)
         }
     ) { padding ->
         Column(

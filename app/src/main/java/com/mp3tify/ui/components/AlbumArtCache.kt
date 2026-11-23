@@ -12,7 +12,9 @@ object AlbumArtCache {
     private val cache = object : LruCache<String, Bitmap>(MAX_CACHE_BYTES) {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
     }
-    fun clear() { try { cache.evictAll() } catch (e: Exception) {} }
+    private val noArtKeys = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    fun clear() { try { cache.evictAll(); noArtKeys.clear() } catch (e: Exception) {} }
+    fun peek(path: String, sizePx: Int): Bitmap? = cache.get("$path@$sizePx")
 
     /**
      * Decodes album art. If [path] is a JPG cache file that was deleted (cache
@@ -22,12 +24,13 @@ object AlbumArtCache {
     fun decode(context: Context, path: String, sizePx: Int, fallbackPath: String? = null): Bitmap? {
         val key = "$path@$sizePx"
         cache.get(key)?.let { return it }
+        if (noArtKeys.contains(key)) return null
         val isContentUri = path.startsWith("content://")
         val looksLikeImageFile = !isContentUri && (
             path.endsWith(".jpg", ignoreCase = true) || path.endsWith(".jpeg", ignoreCase = true) ||
             path.endsWith(".png", ignoreCase = true) || path.endsWith(".webp", ignoreCase = true)
         )
-        return try {
+        val res: Bitmap? = try {
             if (looksLikeImageFile) {
                 val bmp = decodeImageFile(path, sizePx)
                 if (bmp != null) { cache.put(key, bmp); bmp }
@@ -44,6 +47,8 @@ object AlbumArtCache {
                 decodeAudioEmbedded(context, path, sizePx)?.also { cache.put(key, it) }
             }
         } catch (e: Exception) { null }
+        if (res == null) { if (noArtKeys.size > 4000) noArtKeys.clear(); noArtKeys.add(key) }
+        return res
     }
 
     private fun decodeImageFile(path: String, sizePx: Int): Bitmap? {

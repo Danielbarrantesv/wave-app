@@ -83,7 +83,7 @@ import com.mp3tify.data.repository.Repository
 import com.mp3tify.playback.PlaybackController
 import com.mp3tify.playback.SleepTimerManager
 import com.mp3tify.ui.components.CollageCover
-import com.mp3tify.ui.components.PlayerBar
+import com.mp3tify.ui.components.LivePlayerBar
 import com.mp3tify.ui.components.ScrollbarLazyColumn
 import com.mp3tify.ui.components.SleepTimerDialog
 import com.mp3tify.ui.components.rememberAutoHideToolbar
@@ -108,7 +108,7 @@ fun PlaylistScreen(
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    val playbackState by PlaybackController.state.collectAsState()
+    val currentSongId by PlaybackController.currentSongId.collectAsState()
     val playlist by vm.playlist.collectAsState()
     val songs by vm.songs.collectAsState()
     val importing by vm.importing.collectAsState()
@@ -122,6 +122,7 @@ fun PlaylistScreen(
     // CRITICAL (v2.5.40): caché síncrona instantánea para vista lista/cuadrícula en playlists.
     val playlistViewMode by Preferences.playlistViewModeState.collectAsState()
     val isGridView = playlistViewMode == "GRID"
+    val songChunks = remember(songs) { songs.chunked(3) }
     var showSleepTimerDialog by remember { mutableStateOf(false) }
     val sleepTimerMinutes by SleepTimerManager.activeMinutes.collectAsState()
     var showRename by remember { mutableStateOf(false) }
@@ -249,7 +250,7 @@ fun PlaylistScreen(
                 )
             },
             bottomBar = {
-                PlayerBar(state = playbackState, onOpenNowPlaying = onOpenNowPlaying)
+                LivePlayerBar(onOpenNowPlaying = onOpenNowPlaying)
             }
         ) { padding ->
             Column(
@@ -443,7 +444,7 @@ fun PlaylistScreen(
                 } else {
                     // CRITICAL (v2.5.36): soporte para vista lista o cuadrícula
                     if (isGridView) {
-                        items(songs.chunked(3), key = { group -> "grid_${group.first().id}" }) { group ->
+                        items(songChunks, key = { group -> "grid_${group.first().id}" }) { group ->
                             Row(
                                 modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
                                 horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -454,7 +455,7 @@ fun PlaylistScreen(
                                         onClick = { if (selectionMode) vm.toggleSelected(song.id) else vm.play(song) },
                                         onLongClick = { if (selectionMode) vm.toggleSelected(song.id) else songForOptions = song },
                                         modifier = Modifier.weight(1f),
-                                        isPlaying = song.id == playbackState.playlist.getOrNull(playbackState.currentWindow)?.id
+                                        isPlaying = song.id == currentSongId
                                     )
                                 }
                                 repeat(3 - group.size) { Spacer(Modifier.weight(1f)) }
@@ -484,7 +485,7 @@ fun PlaylistScreen(
                                 onLongClick = { if (selectionMode) vm.toggleSelected(song.id) else songForOptions = song },
                                 onOpenMenu = { songForOptions = song },
                                 onToggleFavorite = { vm.toggleFavorite(song) },
-                                isPlaying = song.id == playbackState.playlist.getOrNull(playbackState.currentWindow)?.id,
+                                isPlaying = song.id == currentSongId,
                                 // #2 FIX: onAddToPlaylist y onEditInfo estaban vacios ({ }).
                                 // Ahora abren los mismos dialogs que LibraryScreen.
                                 onAddToPlaylist = {

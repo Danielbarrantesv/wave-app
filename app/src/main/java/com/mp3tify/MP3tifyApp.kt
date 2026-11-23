@@ -107,7 +107,7 @@ class MP3tifyApp : Application(), ImageLoaderFactory {
                     .maxSizeBytes(64L * 1024 * 1024)
                     .build()
             }
-            .crossfade(true)
+            .crossfade(false)
             .build()
     }
 }

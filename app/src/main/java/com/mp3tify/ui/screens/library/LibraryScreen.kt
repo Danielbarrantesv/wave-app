@@ -106,7 +106,7 @@ import com.mp3tify.playback.PlaybackController
 import com.mp3tify.playback.SleepTimerManager
 import com.mp3tify.ui.components.AlbumArt
 import com.mp3tify.ui.components.CollageCover
-import com.mp3tify.ui.components.PlayerBar
+import com.mp3tify.ui.components.LivePlayerBar
 import com.mp3tify.ui.components.ScrollbarLazyColumn
 import com.mp3tify.ui.components.SleepTimerDialog
 import com.mp3tify.ui.components.rememberAutoHideToolbar
@@ -133,7 +133,7 @@ fun LibraryScreen(
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    val playbackState by PlaybackController.state.collectAsState()
+    val currentSongId by PlaybackController.currentSongId.collectAsState()
     val songs by vm.songs.collectAsState()
     val playlists by vm.playlists.collectAsState()
     val artists by vm.artists.collectAsState()
@@ -147,15 +147,12 @@ fun LibraryScreen(
     // CRITICAL (v2.5.13 UI): canción actualmente sonando + IDs de playlists que la
     // contienen. Se recalcula cuando cambia el currentSong (LaunchedEffect corre en
     // IO via Repository.playlistIdsForSong, query SQL simple).
-    val currentSong = playbackState.playlist.getOrNull(playbackState.currentWindow)
     var playingPlaylistIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
     val repo = remember { Repository.get(context) }
-    LaunchedEffect(currentSong?.id) {
-        playingPlaylistIds = if (currentSong != null) {
-            try { repo.playlistIdsForSong(currentSong.id).toSet() } catch (e: Exception) { emptySet() }
-        } else {
-            emptySet()
-        }
+    LaunchedEffect(currentSongId) {
+        playingPlaylistIds = currentSongId?.let { id ->
+            try { repo.playlistIdsForSong(id).toSet() } catch (_: Exception) { emptySet() }
+        } ?: emptySet()
     }
 
     // CRITICAL (v2.5.13 UI): Favoritos SIEMPRE primero, luego el resto por
@@ -274,7 +271,7 @@ fun LibraryScreen(
                 )
             },
             bottomBar = {
-                PlayerBar(state = playbackState, onOpenNowPlaying = onOpenNowPlaying)
+                LivePlayerBar(onOpenNowPlaying = onOpenNowPlaying)
             }
             // CRITICAL (v2.5.31): FAB quitado por solicitud del dev. El botón
             // de agregar música sigue disponible en el TopAppBar (icono LibraryMusic).
@@ -359,6 +356,8 @@ fun LibraryScreen(
                 }
 
                 val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+                val artistsWithMultiple = remember(artists) { artists.filter { it.songs.size > 1 } }
+                val songChunks = remember(songs, isLandscape) { songs.chunked(if (isLandscape) 4 else 3) }
 
                 Row(Modifier.weight(1f).fillMaxWidth()) {
                     if (isLandscape) {
@@ -497,7 +496,7 @@ fun LibraryScreen(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             contentPadding = PaddingValues(horizontal = 12.dp)
                         ) {
-                            items(sortedPlaylists) { pl ->
+                            items(sortedPlaylists, key = { "pl_${it.id}" }) { pl ->
                                 PlaylistCard(
                                     playlist = pl,
                                     isPlaying = playingPlaylistIds.contains(pl.id),
@@ -512,7 +511,6 @@ fun LibraryScreen(
                 // Solo se muestra si hay al menos un artista con MÁS de una canción.
                 // LasArtistCards son virtuales: se generan a partir de las canciones
                 // existentes (no se persisten en la base de datos como playlists).
-                val artistsWithMultiple = artists.filter { it.songs.size > 1 }
                 if (artistsWithMultiple.isNotEmpty()) {
                     item {
                         Row(
@@ -569,7 +567,7 @@ fun LibraryScreen(
                     } else {
                         // CRITICAL (v2.5.32): soporte para vista lista o cuadrícula
                         if (viewMode == ViewMode.GRID) {
-                            items(songs.chunked(if (isLandscape) 4 else 3), key = { group -> "grid_${group.first().id}" }) { group ->
+                            items(songChunks, key = { group -> "grid_${group.first().id}" }) { group ->
                                 Row(
                                     modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
                                     horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -580,7 +578,7 @@ fun LibraryScreen(
                                             onClick = { if (selectionMode) vm.toggleSelected(song.id) else vm.play(song) },
                                             onLongClick = { if (selectionMode) vm.toggleSelected(song.id) else songForOptions = song },
                                             modifier = Modifier.weight(1f),
-                                            isPlaying = song.id == playbackState.playlist.getOrNull(playbackState.currentWindow)?.id,
+                                            isPlaying = song.id == currentSongId,
                                             artSize = if (isLandscape) 90.dp else 120.dp
                                         )
                                     }
@@ -611,7 +609,7 @@ fun LibraryScreen(
                                         onLongClick = { if (selectionMode) vm.toggleSelected(song.id) else songForOptions = song },
                                         onOpenMenu = { songForOptions = song },
                                     onToggleFavorite = { vm.toggleFavorite(song) },
-                                    isPlaying = song.id == playbackState.playlist.getOrNull(playbackState.currentWindow)?.id,
+                                    isPlaying = song.id == currentSongId,
                                     onAddToPlaylist = {
                                         songForAddToPlaylist = song
                                         showAddToPlaylistDialog = true

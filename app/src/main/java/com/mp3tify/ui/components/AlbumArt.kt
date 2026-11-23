@@ -41,31 +41,36 @@ import java.io.File
 @Composable
 fun AlbumArt(song: Song?, size: Dp, modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    var recoveredBitmap by remember(song?.id) { mutableStateOf<Bitmap?>(null) }
-
-    val model: Any? = when {
-        song == null -> null
-        song.artUri.isNullOrBlank() -> null
-        song.artUri!!.startsWith("content") -> Uri.parse(song.artUri)
-        song.artUri!!.startsWith("/") -> File(song.artUri!!)
-        else -> song.artUri
-    }
-
-    // CRITICAL FIX: if artUri's file is missing (cache wiped), recover from ID3.
-    LaunchedEffect(song?.id) {
-        val s = song ?: return@LaunchedEffect
-        val artPath = s.artUri?.takeIf { it.isNotBlank() }
-        if (artPath != null && !artPath.startsWith("content://") && !File(artPath).exists()) {
-            recoveredBitmap = withContext(Dispatchers.IO) {
-                try { AlbumArtCache.decode(context, s.filePath, 256) } catch (e: Exception) { null }
-            }
-        } else if (artPath.isNullOrBlank() && s.filePath.isNotBlank()) {
-            recoveredBitmap = withContext(Dispatchers.IO) {
-                try { AlbumArtCache.decode(context, s.filePath, 256) } catch (e: Exception) { null }
-            }
+    val model: Any? = remember(song?.id, song?.artUri) {
+        when {
+            song == null -> null
+            song.artUri.isNullOrBlank() -> null
+            song.artUri!!.startsWith("content") -> Uri.parse(song.artUri)
+            song.artUri!!.startsWith("/") -> File(song.artUri!!)
+            else -> song.artUri
         }
     }
-
+    var recoveredBitmap by remember(song?.id, song?.artUri) {
+        val fp = song?.filePath
+        val cached = if (song != null && song.artUri.isNullOrBlank() && !fp.isNullOrBlank()) AlbumArtCache.peek(fp, 256) else null
+        mutableStateOf(cached)
+    }
+    LaunchedEffect(song?.id, song?.artUri) {
+        val s = song ?: return@LaunchedEffect
+        if (recoveredBitmap != null) return@LaunchedEffect
+        val artPath = s.artUri?.takeIf { it.isNotBlank() }
+        if (artPath != null && !artPath.startsWith("content://")) {
+            val decoded = withContext(Dispatchers.IO) {
+                if (!File(artPath).exists()) try { AlbumArtCache.decode(context, s.filePath, 256) } catch (_: Exception) { null } else null
+            }
+            if (decoded != null) recoveredBitmap = decoded
+        } else if (artPath.isNullOrBlank() && s.filePath.isNotBlank()) {
+            val decoded = withContext(Dispatchers.IO) {
+                try { AlbumArtCache.decode(context, s.filePath, 256) } catch (_: Exception) { null }
+            }
+            if (decoded != null) recoveredBitmap = decoded
+        }
+    }
     Box(
         modifier = modifier
             .size(size)

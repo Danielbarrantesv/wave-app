@@ -26,6 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,6 +57,12 @@ import com.mp3tify.ui.t
  * El usuario reportó que quería "una bolita en la línea de tiempo para
  * arrastrar para adelantar o retroceder". Este slider custom resuelve eso.
  */
+@Composable
+fun LivePlayerBar(onOpenNowPlaying: () -> Unit) {
+    val state by PlaybackController.state.collectAsState()
+    PlayerBar(state = state, onOpenNowPlaying = onOpenNowPlaying)
+}
+
 @Composable
 fun PlayerBar(
     state: PlaybackState,

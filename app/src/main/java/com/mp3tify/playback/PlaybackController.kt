@@ -55,6 +55,8 @@ object PlaybackController {
 
     private val _state = MutableStateFlow(PlaybackState())
     val state: StateFlow<PlaybackState> = _state.asStateFlow()
+    private val _currentSongId = MutableStateFlow<Long?>(null)
+    val currentSongId: StateFlow<Long?> = _currentSongId.asStateFlow()
 
     private var pollJob: Job? = null
     private var lastRecordedWindow = -1
@@ -292,6 +294,8 @@ object PlaybackController {
                 repeatOne = p.repeatMode == Player.REPEAT_MODE_ONE,
                 repeatAll = p.repeatMode == Player.REPEAT_MODE_ALL
             )
+            val newSongId = if (p.mediaItemCount == 0) null else _state.value.playlist.getOrNull(window)?.id
+            if (_currentSongId.value != newSongId) _currentSongId.value = newSongId
             // EQ attach ahora se hace via Player.Listener.onAudioSessionIdChanged (ver connect()).
             // Ya no hacemos polling aquí.
         } catch (e: Exception) {
@@ -450,6 +454,7 @@ object PlaybackController {
         // Ahora: construir MediaItems en IO thread, aplicar en Main thread.
         _state.value = _state.value.copy(playlist = songs)
         val safeIndex = startIndex.coerceIn(0, songs.size - 1)
+        _currentSongId.value = songs.getOrNull(safeIndex)?.id
         lastRecordedWindow = -1
         // Guardar cola para restaurar despues de process kill (#2 queue persistence)
         saveQueueToPrefs(songs, safeIndex)
@@ -750,11 +755,13 @@ object PlaybackController {
             p.stop()
             p.clearMediaItems()
             _state.value = PlaybackState()
+            _currentSongId.value = null
         } catch (e: Exception) {
             e.printStackTrace()
             try { player?.release() } catch (_: Exception) {}
             player = null
             _state.value = PlaybackState()
+            _currentSongId.value = null
         }
     }
 
@@ -911,7 +918,7 @@ object PlaybackController {
                 val p = player
                 if (p != null) { for (i in (p.mediaItemCount - 1) downTo 0) { if (p.getMediaItemAt(i).mediaId == songId.toString()) p.removeMediaItem(i) } }
                 _state.value = _state.value.copy(playlist = next)
-                saveQueueToPrefs(next, (p?.currentMediaItemIndex ?: 0).coerceIn(0, next.size - 1)); refreshState()
+                val idx = (p?.currentMediaItemIndex ?: 0).coerceIn(0, next.size - 1); _currentSongId.value = next.getOrNull(idx)?.id; saveQueueToPrefs(next, idx); refreshState()
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
