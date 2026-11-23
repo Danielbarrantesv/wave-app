@@ -3,6 +3,7 @@ package com.mp3tify.ui.screens.playlist
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.ArrowBack
@@ -57,6 +59,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -76,6 +79,7 @@ import com.mp3tify.data.model.displayArtist
 import com.mp3tify.data.model.displayTitle
 import com.mp3tify.data.repository.Repository
 import com.mp3tify.playback.PlaybackController
+import com.mp3tify.playback.WakeLockManager
 import com.mp3tify.ui.components.CollageCover
 import com.mp3tify.ui.components.PlayerBar
 import com.mp3tify.ui.components.ScrollbarLazyColumn
@@ -84,6 +88,7 @@ import com.mp3tify.ui.components.SongRow
 import com.mp3tify.ui.t
 import com.mp3tify.ui.tf
 import com.mp3tify.ui.viewmodel.PlaylistViewModel
+import com.mp3tify.util.Preferences
 import kotlinx.coroutines.launch
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
@@ -111,6 +116,12 @@ fun PlaylistScreen(
     var sortMenuOpen by remember { mutableStateOf(false) }
     // CRITICAL (v2.5.35): estado para vista lista/grid + sleep timer en PlaylistScreen
     var isGridView by remember { mutableStateOf(false) }
+    // CRITICAL (v2.5.39): sincroniza isGridView con DataStore para sobrevivir reinicios.
+    val playlistViewMode by Preferences.playlistViewModeFlow.collectAsState(initial = "LIST")
+    LaunchedEffect(playlistViewMode) {
+        val next = playlistViewMode == "GRID"
+        if (next != isGridView) isGridView = next
+    }
     var showSleepTimerDialog by remember { mutableStateOf(false) }
     var sleepTimerMinutes by remember { mutableStateOf(0) }
     var sleepTimerJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
@@ -274,38 +285,58 @@ fun PlaylistScreen(
                     )
                 }
 
-                // CRITICAL (v2.5.36): toolbar fija con toggle vista lista/grid + sleep timer
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        "${songs.size} canciones",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f)
-                    )
-                    IconButton(onClick = { isGridView = !isGridView }) {
-                        Icon(
-                            if (isGridView) Icons.Filled.List else Icons.Filled.Apps,
-                            contentDescription = if (isGridView) "Vista lista" else "Vista cuadrícula",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                // CRITICAL (v2.5.39): auto-hide toolbar — mismo patrón que LibraryScreen.kt:313-322.
+                // Esconde la toolbar (count + grid toggle + sleep timer) al hacer scroll
+                // hacia abajo, la muestra al hacer scroll hacia arriba.
+                val scrollState = rememberLazyListState()
+                var prevIndex by remember { mutableStateOf(0) }
+                var isToolbarVisible by remember { mutableStateOf(true) }
+                LaunchedEffect(scrollState.firstVisibleItemIndex) {
+                    val currentIndex = scrollState.firstVisibleItemIndex
+                    if (currentIndex > prevIndex) isToolbarVisible = false
+                    else if (currentIndex < prevIndex) isToolbarVisible = true
+                    prevIndex = currentIndex
+                }
+                // CRITICAL (v2.5.36): toolbar con toggle vista lista/grid + sleep timer
+                AnimatedVisibility(visible = isToolbarVisible) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "${songs.size} canciones",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f)
                         )
-                    }
-                    IconButton(onClick = { showSleepTimerDialog = true }) {
-                        Icon(
-                            Icons.Filled.Schedule,
-                            contentDescription = "Temporizador de sueño",
-                            tint = if (sleepTimerMinutes > 0) MaterialTheme.colorScheme.primary
-                                   else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        IconButton(onClick = {
+                            // CRITICAL (v2.5.39): persistir vista lista/grid en DataStore.
+                            val next = !isGridView
+                            isGridView = next
+                            scope.launch { Preferences.setPlaylistViewMode(if (next) "GRID" else "LIST") }
+                        }) {
+                            Icon(
+                                if (isGridView) Icons.Filled.List else Icons.Filled.Apps,
+                                contentDescription = if (isGridView) "Vista lista" else "Vista cuadrícula",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        IconButton(onClick = { showSleepTimerDialog = true }) {
+                            Icon(
+                                Icons.Filled.Schedule,
+                                contentDescription = "Temporizador de sueño",
+                                tint = if (sleepTimerMinutes > 0) MaterialTheme.colorScheme.primary
+                                       else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
 
                 ScrollbarLazyColumn(
                     modifier = Modifier.fillMaxSize(),
+                    state = scrollState,
                     contentPadding = PaddingValues(bottom = 96.dp)
                 ) {
                 item {
@@ -753,6 +784,9 @@ fun PlaylistScreen(
                                     kotlinx.coroutines.delay(minutes * 60_000L)
                                     PlaybackController.pause()
                                     sleepTimerMinutes = 0
+                                    // CRITICAL (v2.5.39): apagar pantalla al expirar el timer.
+                                    context.findActivity()?.let { WakeLockManager.turnOffScreen(it) }
+                                    WakeLockManager.lockScreenWithDeviceAdmin(context.applicationContext)
                                 }
                             },
                             modifier = Modifier.fillMaxWidth()
@@ -898,4 +932,17 @@ private fun PlaylistSongGridCard(
             textAlign = TextAlign.Center
         )
     }
+}
+
+/**
+ * CRITICAL (v2.5.39): obtiene la Activity desde un Context para poder llamar
+ * a [WakeLockManager.turnOffScreen] desde el cuerpo del sleep timer job.
+ */
+private fun android.content.Context.findActivity(): android.app.Activity? {
+    var ctx = this
+    while (ctx is android.content.ContextWrapper) {
+        if (ctx is android.app.Activity) return ctx
+        ctx = ctx.baseContext
+    }
+    return null
 }

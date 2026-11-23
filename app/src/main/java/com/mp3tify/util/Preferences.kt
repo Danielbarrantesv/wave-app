@@ -32,6 +32,11 @@ object Preferences {
     private const val KEY_ACCENT_COLOR = "accent_color"
     private const val KEY_LANGUAGE = "language"
 
+    // CRITICAL (v2.5.39): persistencia de vista lista/cuadrícula y pestaña "todas las canciones".
+    private const val KEY_LIBRARY_VIEW_MODE = "library_view_mode"        // "LIST" | "GRID"
+    private const val KEY_PLAYLIST_VIEW_MODE = "playlist_view_mode"      // "LIST" | "GRID"
+    private const val KEY_ALL_SONGS_EXPANDED = "all_songs_expanded"      // bool (default true)
+
     // CRITICAL — Do NOT remove: keepScreenOn=true and keepAppOpen=true by default.
     private const val DEFAULT_KEEP_SCREEN_ON = true
     private const val DEFAULT_KEEP_APP_OPEN = true
@@ -41,6 +46,10 @@ object Preferences {
     private const val DEFAULT_DARK_THEME = true
     private const val DEFAULT_ACCENT_COLOR = "verde"
     private const val DEFAULT_LANGUAGE = "es"
+    private const val DEFAULT_LIBRARY_VIEW_MODE = "LIST"
+    private const val DEFAULT_PLAYLIST_VIEW_MODE = "LIST"
+    // CRITICAL (v2.5.39): la pestaña "todas las canciones" se abre por defecto.
+    private const val DEFAULT_ALL_SONGS_EXPANDED = true
 
     fun init(context: Context) {
         if (appCtx == null) {
@@ -92,6 +101,20 @@ object Preferences {
 
     val languageFlow: Flow<String> by lazy {
         ctx().mp3tifyDataStore.data.map { it[stringPreferencesKey(KEY_LANGUAGE)] ?: DEFAULT_LANGUAGE }
+    }
+
+    // CRITICAL (v2.5.39): vista lista/cuadrícula persistente para LibraryScreen y PlaylistScreen.
+    val libraryViewModeFlow: Flow<String> by lazy {
+        ctx().mp3tifyDataStore.data.map { it[stringPreferencesKey(KEY_LIBRARY_VIEW_MODE)] ?: DEFAULT_LIBRARY_VIEW_MODE }
+    }
+
+    val playlistViewModeFlow: Flow<String> by lazy {
+        ctx().mp3tifyDataStore.data.map { it[stringPreferencesKey(KEY_PLAYLIST_VIEW_MODE)] ?: DEFAULT_PLAYLIST_VIEW_MODE }
+    }
+
+    // CRITICAL (v2.5.39): estado abierto/cerrado de la pestaña "todas las canciones".
+    val allSongsExpandedFlow: Flow<Boolean> by lazy {
+        ctx().mp3tifyDataStore.data.map { it[booleanPreferencesKey(KEY_ALL_SONGS_EXPANDED)] ?: DEFAULT_ALL_SONGS_EXPANDED }
     }
 
     // ------------------------------------------------------------------
@@ -173,6 +196,32 @@ object Preferences {
     suspend fun setLanguage(value: String) {
         try {
             ctx().mp3tifyDataStore.edit { it[stringPreferencesKey(KEY_LANGUAGE)] = value }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    // CRITICAL (v2.5.39): persistir vista lista/cuadrícula (sincroniza UI entre sesiones).
+    suspend fun setLibraryViewMode(value: String) {
+        try {
+            ctx().mp3tifyDataStore.edit { it[stringPreferencesKey(KEY_LIBRARY_VIEW_MODE)] = value }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    suspend fun setPlaylistViewMode(value: String) {
+        try {
+            ctx().mp3tifyDataStore.edit { it[stringPreferencesKey(KEY_PLAYLIST_VIEW_MODE)] = value }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    // CRITICAL (v2.5.39): persistir estado abierto/cerrado de "todas las canciones".
+    suspend fun setAllSongsExpanded(value: Boolean) {
+        try {
+            ctx().mp3tifyDataStore.edit { it[booleanPreferencesKey(KEY_ALL_SONGS_EXPANDED)] = value }
         } catch (e: Exception) {
             e.printStackTrace()
         }
