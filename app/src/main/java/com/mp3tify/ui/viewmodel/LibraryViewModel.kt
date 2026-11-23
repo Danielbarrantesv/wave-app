@@ -88,20 +88,13 @@ class LibraryViewModel(
     ) {
         importing.value = true
         importProgress.value = 0
-        val progressJob = scope.launch {
-            while (importing.value) {
-                if (importProgress.value < 95) importProgress.value += 1
-                kotlinx.coroutines.delay(200)
-            }
-        }
         scope.launch(Dispatchers.IO) {
             var totalAdded = 0
             try {
-                totalAdded = repo.importFolderWithSubPlaylists(uri, subfolders)
+                totalAdded = repo.importFolderWithSubPlaylists(uri, subfolders) { p -> importProgress.value = p }
             } catch (e: Exception) {
                 e.printStackTrace()
             }
-            progressJob.cancel()
             importProgress.value = 100
             importing.value = false
             try { onDone(totalAdded) } catch (e: Exception) { e.printStackTrace() }
@@ -112,20 +105,13 @@ class LibraryViewModel(
         importing.value = true
         importProgress.value = 0
         // Timer de progreso: sube gradualmente hasta 95% mientras el import corre.
-        val progressJob = scope.launch {
-            while (importing.value) {
-                if (importProgress.value < 95) importProgress.value += 1
-                kotlinx.coroutines.delay(200)
-            }
-        }
         scope.launch(Dispatchers.IO) {
             var result: Repository.ImportResult? = null
             try {
-                result = repo.importFromFolder(uri)
+                result = repo.importFromFolder(uri) { p -> importProgress.value = p }
             } catch (e: Exception) {
                 e.printStackTrace()
             }
-            progressJob.cancel()
             importProgress.value = 100
             importing.value = false
             try {
@@ -139,16 +125,9 @@ class LibraryViewModel(
     fun importFiles(uris: List<String>, onDone: (Repository.ImportResult?) -> Unit = {}) {
         importing.value = true
         importProgress.value = 0
-        val progressJob = scope.launch {
-            while (importing.value) {
-                if (importProgress.value < 95) importProgress.value += 1
-                kotlinx.coroutines.delay(200)
-            }
-        }
         scope.launch(Dispatchers.IO) {
             var result: Repository.ImportResult? = null
-            try { result = repo.importFiles(uris) } catch (e: Exception) { e.printStackTrace() }
-            progressJob.cancel()
+            try { result = repo.importFiles(uris) { p -> importProgress.value = p } } catch (e: Exception) { e.printStackTrace() }
             importProgress.value = 100
             importing.value = false
             try { onDone(result) } catch (e: Exception) { e.printStackTrace() }
@@ -157,9 +136,11 @@ class LibraryViewModel(
 
     fun importFilesIntoPlaylist(uris: List<String>, playlistId: Long, onDone: (Repository.ImportResult?) -> Unit = {}) {
         importing.value = true
+        importProgress.value = 0
         scope.launch(Dispatchers.IO) {
             var result: Repository.ImportResult? = null
-            try { result = repo.importFiles(uris, playlistId) } catch (e: Exception) { e.printStackTrace() }
+            try { result = repo.importFiles(uris, playlistId) { p -> importProgress.value = p } } catch (e: Exception) { e.printStackTrace() }
+            importProgress.value = 100
             importing.value = false
             try { onDone(result) } catch (e: Exception) { e.printStackTrace() }
         }
@@ -167,13 +148,15 @@ class LibraryViewModel(
 
     fun importFolderIntoPlaylist(uri: String, playlistId: Long, onDone: (Repository.ImportResult?) -> Unit = {}) {
         importing.value = true
+        importProgress.value = 0
         scope.launch(Dispatchers.IO) {
             var result: Repository.ImportResult? = null
             try {
-                result = repo.importFolderIntoPlaylist(uri, playlistId)
+                result = repo.importFolderIntoPlaylist(uri, playlistId) { p -> importProgress.value = p }
             } catch (e: Exception) {
                 e.printStackTrace()
             }
+            importProgress.value = 100
             importing.value = false
             try {
                 onDone(result)
@@ -258,12 +241,6 @@ class LibraryViewModel(
             importing.value = true
             importProgress.value = 0
         }
-        val progressJob = if (!folderUri.isNullOrBlank()) scope.launch {
-            while (importing.value) {
-                if (importProgress.value < 95) importProgress.value += 1
-                kotlinx.coroutines.delay(200)
-            }
-        } else null
         scope.launch {
             try {
                 val id = repo.createPlaylist(name, null, folderUri)
@@ -271,8 +248,7 @@ class LibraryViewModel(
                     if (songIds.isNotEmpty()) repo.addSongsToPlaylist(id, songIds)
                     if (!folderUri.isNullOrBlank()) {
                         scope.launch(Dispatchers.IO) {
-                            try { repo.importFolderIntoPlaylist(folderUri, id) } catch (e: Exception) { e.printStackTrace() }
-                            progressJob?.cancel()
+                            try { repo.importFolderIntoPlaylist(folderUri, id) { p -> importProgress.value = p } } catch (e: Exception) { e.printStackTrace() }
                             importProgress.value = 100
                             importing.value = false
                         }
@@ -281,7 +257,6 @@ class LibraryViewModel(
                 onCreated(id)
             } catch (e: Exception) {
                 e.printStackTrace()
-                progressJob?.cancel()
                 importing.value = false
             }
         }

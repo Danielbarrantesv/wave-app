@@ -56,12 +56,13 @@ class MediaPlaybackService : MediaSessionService() {
             },
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        return MediaSession.Builder(this, player).setSessionActivity(pi).build().also { mediaSession = it }
+        return MediaSession.Builder(this, player).setSessionActivity(pi).build().also { mediaSession = it; addSession(it) }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
         try {
+            if (PlaybackController.playerOrNull() == null) PlaybackController.connect(applicationContext)
             val cur = PlaybackController.playerOrNull()
             val s = if (cur != null && (mediaSession == null || mediaSession?.player !== cur)) {
                 buildOrReplaceSession(cur)

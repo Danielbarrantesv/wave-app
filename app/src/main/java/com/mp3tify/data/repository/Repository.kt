@@ -396,11 +396,11 @@ class Repository private constructor(private val context: Context) {
     // Folder import (SAF tree walk + 4-level dedup)
     // ------------------------------------------------------------------
 
-    suspend fun importFromFolder(folderUriString: String): ImportResult =
-        importFolderInternal(folderUriString, null)
+    suspend fun importFromFolder(folderUriString: String, onProgress: (Int) -> Unit = {}): ImportResult =
+        importFolderInternal(folderUriString, null, onProgress)
 
-    suspend fun importFolderIntoPlaylist(folderUriString: String, playlistId: Long): ImportResult =
-        importFolderInternal(folderUriString, playlistId)
+    suspend fun importFolderIntoPlaylist(folderUriString: String, playlistId: Long, onProgress: (Int) -> Unit = {}): ImportResult =
+        importFolderInternal(folderUriString, playlistId, onProgress)
 
     /**
      * Escanea una carpeta raiz y devuelve las subcarpetas que contienen al menos
@@ -447,16 +447,18 @@ class Repository private constructor(private val context: Context) {
      */
     suspend fun importFolderWithSubPlaylists(
         folderUriString: String,
-        subfolders: List<Pair<String, String>>
+        subfolders: List<Pair<String, String>>,
+        onProgress: (Int) -> Unit = {}
     ): Int = withContext(Dispatchers.IO) {
         var totalAdded = 0
         try {
             // 1. Importar toda la carpeta a la biblioteca general (incluye subcarpetas)
-            val rootResult = importFolderInternal(folderUriString, null)
+            val rw = if (subfolders.isNotEmpty()) 85 else 100
+            val rootResult = importFolderInternal(folderUriString, null) { pr -> onProgress(((pr * rw) / 100).coerceIn(0, rw)) }
             totalAdded += rootResult.added
-
-            // 2. Crear una playlist por cada subcarpeta con audio
-            for ((rawName, subUri) in subfolders) {
+            val sn = subfolders.size
+            for ((si, pair) in subfolders.withIndex()) {
+                val (rawName, subUri) = pair
                 try {
                     // Capitalizar primera letra
                     val capitalizedName = if (rawName.isNotEmpty()) {
@@ -466,7 +468,7 @@ class Repository private constructor(private val context: Context) {
                     val uniqueName = ensureUniquePlaylistName(capitalizedName)
                     val playlistId = createPlaylist(uniqueName, description = "from-folder")
                     // Importar solo esta subcarpeta a la playlist recien creada
-                    importFolderInternal(subUri, playlistId)
+                    importFolderInternal(subUri, playlistId) { sp -> onProgress((85 + (((si * 100 + sp) * 15) / (sn * 100))).coerceIn(85, 100)) }
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
@@ -491,7 +493,7 @@ class Repository private constructor(private val context: Context) {
     /**
      * Importa URIs individuales (GetMultipleContent) a la library y opcionalmente a un playlist.
      */
-    suspend fun importFiles(uris: List<String>, targetPlaylistId: Long? = null): ImportResult =
+    suspend fun importFiles(uris: List<String>, targetPlaylistId: Long? = null, onProgress: (Int) -> Unit = {}): ImportResult =
         withContext(Dispatchers.IO) {
             var added = 0; var duplicates = 0; var total = uris.size
             val playlistAttachIds = mutableListOf<Long>()
@@ -508,7 +510,8 @@ class Repository private constructor(private val context: Context) {
                     // storage bajo) a filesDir (persistente, solo se borra al desinstalar
                     // o con "borrar datos"). Asi las portadas sobreviven.
                     val artDir = File(context.filesDir, "art"); if (!artDir.exists()) artDir.mkdirs()
-                for (uriStr in uris) {
+                var lastPct = -1
+                for ((idx, uriStr) in uris.withIndex()) {
                     try {
                         val df = DocumentFile.fromSingleUri(context, Uri.parse(uriStr)) ?: continue
                         if (!isAudioFile(df)) continue
@@ -531,8 +534,11 @@ class Repository private constructor(private val context: Context) {
                         } else {
                             duplicates++; songDao.getByPath(uriStr)?.let { playlistAttachIds.add(it.id) }
                         }
-                    } catch (e: Exception) { e.printStackTrace() }
+                    } catch (e: Exception) { e.printStackTrace() } finally {
+                        if (total > 0) { val pct = (((idx + 1) * 100) / total).coerceIn(1, 100); if (pct != lastPct) { lastPct = pct; onProgress(pct) } }
+                    }
                 }
+                onProgress(100)
                 if (targetPlaylistId != null && playlistAttachIds.isNotEmpty()) {
                     playlistDao.addSongsToPlaylist(targetPlaylistId, playlistAttachIds.toSet().toList())
                 }
@@ -545,15 +551,17 @@ class Repository private constructor(private val context: Context) {
             ImportResult(added, duplicates, total)
         }
 
-    private suspend fun importFolderInternal(folderUriString: String, targetPlaylistId: Long?): ImportResult =
+    private suspend fun importFolderInternal(folderUriString: String, targetPlaylistId: Long?, onProgress: (Int) -> Unit = {}): ImportResult =
         withContext(Dispatchers.IO) {
             var added = 0; var duplicates = 0; var total = 0
             val playlistAttachIds = mutableListOf<Long>()
             try {
                 val tree = DocumentFile.fromTreeUri(context, Uri.parse(folderUriString))
                 if (tree != null) {
+                    onProgress(2)
                     val files = mutableListOf<DocumentFile>(); walkTree(tree, files, 0)
                     val audio = files.filter { isAudioFile(it) }; total = audio.size
+                    onProgress(if (total == 0) 100 else 5)
                     val existing = songDao.listAll()
                     val existingByPath = existing.associateBy { it.filePath }
                     val knownPaths = existing.map { it.filePath }.toHashSet()
@@ -568,7 +576,8 @@ class Repository private constructor(private val context: Context) {
                     // storage bajo) a filesDir (persistente, solo se borra al desinstalar
                     // o con "borrar datos"). Asi las portadas sobreviven.
                     val artDir = File(context.filesDir, "art"); if (!artDir.exists()) artDir.mkdirs()
-                    for (df in audio) {
+                    var lastPct = 5
+                    for ((idx, df) in audio.withIndex()) {
                         try {
                             val uriStr = df.uri.toString(); val fileName = df.name ?: uriStr; val fileSize = df.length()
                             if (knownPaths.contains(uriStr)) {
@@ -603,8 +612,11 @@ class Repository private constructor(private val context: Context) {
                             } else {
                                 duplicates++; songDao.getByPath(uriStr)?.let { playlistAttachIds.add(it.id) }
                             }
-                        } catch (e: Exception) { e.printStackTrace() }
+                        } catch (e: Exception) { e.printStackTrace() } finally {
+                            if (total > 0) { val pct = (5 + (((idx + 1) * 95) / total)).coerceIn(5, 100); if (pct != lastPct) { lastPct = pct; onProgress(pct) } }
+                        }
                     }
+                    onProgress(100)
                     if (targetPlaylistId != null && playlistAttachIds.isNotEmpty()) {
                         playlistDao.addSongsToPlaylist(targetPlaylistId, playlistAttachIds.toSet().toList())
                     }
