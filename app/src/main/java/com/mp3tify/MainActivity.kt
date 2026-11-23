@@ -41,7 +41,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.mp3tify.data.repository.Repository
 import com.mp3tify.playback.PlaybackController
+import com.mp3tify.playback.SleepTimerManager
 import com.mp3tify.playback.WakeLockManager
+import android.view.WindowManager
 import com.mp3tify.ui.AppNav
 import com.mp3tify.ui.ProvideAppLanguage
 import com.mp3tify.ui.t
@@ -221,6 +223,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        SleepTimerManager.attachActivity(this)
+        WakeLockManager.refreshDeviceAdminStatus(this)
+        val lp = window.attributes
+        if (lp.screenBrightness != WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE) {
+            lp.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+            window.attributes = lp
+        }
         lifecycleScope.launch {
             try { val k = Preferences.keepScreenOnFirst(); WakeLockManager.applyKeepScreenOn(this@MainActivity, k) } catch (e: Exception) { e.printStackTrace() }
         }

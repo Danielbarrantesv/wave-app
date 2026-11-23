@@ -79,10 +79,12 @@ import com.mp3tify.data.model.displayArtist
 import com.mp3tify.data.model.displayTitle
 import com.mp3tify.data.repository.Repository
 import com.mp3tify.playback.PlaybackController
-import com.mp3tify.playback.WakeLockManager
+import com.mp3tify.playback.SleepTimerManager
 import com.mp3tify.ui.components.CollageCover
 import com.mp3tify.ui.components.PlayerBar
 import com.mp3tify.ui.components.ScrollbarLazyColumn
+import com.mp3tify.ui.components.SleepTimerDialog
+import com.mp3tify.ui.components.rememberAutoHideToolbar
 import com.mp3tify.ui.I18n
 import com.mp3tify.ui.components.SongRow
 import com.mp3tify.ui.t
@@ -114,17 +116,11 @@ fun PlaylistScreen(
 
     var menuOpen by remember { mutableStateOf(false) }
     var sortMenuOpen by remember { mutableStateOf(false) }
-    // CRITICAL (v2.5.35): estado para vista lista/grid + sleep timer en PlaylistScreen
-    var isGridView by remember { mutableStateOf(false) }
-    // CRITICAL (v2.5.39): sincroniza isGridView con DataStore para sobrevivir reinicios.
-    val playlistViewMode by Preferences.playlistViewModeFlow.collectAsState(initial = "LIST")
-    LaunchedEffect(playlistViewMode) {
-        val next = playlistViewMode == "GRID"
-        if (next != isGridView) isGridView = next
-    }
+    // CRITICAL (v2.5.40): caché síncrona instantánea para vista lista/cuadrícula en playlists.
+    val playlistViewMode by Preferences.playlistViewModeState.collectAsState()
+    val isGridView = playlistViewMode == "GRID"
     var showSleepTimerDialog by remember { mutableStateOf(false) }
-    var sleepTimerMinutes by remember { mutableStateOf(0) }
-    var sleepTimerJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    val sleepTimerMinutes by SleepTimerManager.activeMinutes.collectAsState()
     var showRename by remember { mutableStateOf(false) }
     var showDelete by remember { mutableStateOf(false) }
     var songToDelete by remember { mutableStateOf<Song?>(null) }
@@ -289,14 +285,7 @@ fun PlaylistScreen(
                 // Esconde la toolbar (count + grid toggle + sleep timer) al hacer scroll
                 // hacia abajo, la muestra al hacer scroll hacia arriba.
                 val scrollState = rememberLazyListState()
-                var prevIndex by remember { mutableStateOf(0) }
-                var isToolbarVisible by remember { mutableStateOf(true) }
-                LaunchedEffect(scrollState.firstVisibleItemIndex) {
-                    val currentIndex = scrollState.firstVisibleItemIndex
-                    if (currentIndex > prevIndex) isToolbarVisible = false
-                    else if (currentIndex < prevIndex) isToolbarVisible = true
-                    prevIndex = currentIndex
-                }
+                val isToolbarVisible = rememberAutoHideToolbar(scrollState)
                 // CRITICAL (v2.5.36): toolbar con toggle vista lista/grid + sleep timer
                 AnimatedVisibility(visible = isToolbarVisible) {
                     Row(
@@ -312,9 +301,7 @@ fun PlaylistScreen(
                             modifier = Modifier.weight(1f)
                         )
                         IconButton(onClick = {
-                            // CRITICAL (v2.5.39): persistir vista lista/grid en DataStore.
                             val next = !isGridView
-                            isGridView = next
                             scope.launch { Preferences.setPlaylistViewMode(if (next) "GRID" else "LIST") }
                         }) {
                             Icon(
@@ -767,46 +754,10 @@ fun PlaylistScreen(
         )
     }
 
-    // CRITICAL (v2.5.36): diálogo de sleep timer — 15/30/45/60/90 minutos
     if (showSleepTimerDialog) {
-        AlertDialog(
-            onDismissRequest = { showSleepTimerDialog = false },
-            title = { Text("Temporizador de sueño") },
-            text = {
-                Column {
-                    listOf(15, 30, 45, 60, 90).forEach { minutes ->
-                        TextButton(
-                            onClick = {
-                                sleepTimerJob?.cancel()
-                                sleepTimerMinutes = minutes
-                                showSleepTimerDialog = false
-                                sleepTimerJob = scope.launch {
-                                    kotlinx.coroutines.delay(minutes * 60_000L)
-                                    PlaybackController.pause()
-                                    sleepTimerMinutes = 0
-                                    // CRITICAL (v2.5.39): apagar pantalla al expirar el timer.
-                                    context.findActivity()?.let { WakeLockManager.turnOffScreen(it) }
-                                    WakeLockManager.lockScreenWithDeviceAdmin(context.applicationContext)
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) { Text("$minutes minutos") }
-                    }
-                    if (sleepTimerMinutes > 0) {
-                        Spacer(Modifier.height(8.dp))
-                        TextButton(
-                            onClick = {
-                                sleepTimerJob?.cancel()
-                                sleepTimerMinutes = 0
-                                showSleepTimerDialog = false
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) { Text("Cancelar temporizador") }
-                    }
-                }
-            },
-            confirmButton = {},
-            dismissButton = { TextButton(onClick = { showSleepTimerDialog = false }) { Text(t("close")) } }
+        SleepTimerDialog(
+            activeMinutes = sleepTimerMinutes,
+            onDismiss = { showSleepTimerDialog = false }
         )
     }
 }
@@ -934,15 +885,3 @@ private fun PlaylistSongGridCard(
     }
 }
 
-/**
- * CRITICAL (v2.5.39): obtiene la Activity desde un Context para poder llamar
- * a [WakeLockManager.turnOffScreen] desde el cuerpo del sleep timer job.
- */
-private fun android.content.Context.findActivity(): android.app.Activity? {
-    var ctx = this
-    while (ctx is android.content.ContextWrapper) {
-        if (ctx is android.app.Activity) return ctx
-        ctx = ctx.baseContext
-    }
-    return null
-}

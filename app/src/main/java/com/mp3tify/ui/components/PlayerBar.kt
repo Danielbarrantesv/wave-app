@@ -103,14 +103,14 @@ fun PlayerBar(
                     // CRITICAL (v2.5.39): acortar espacio entre timeline y controles.
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 2.dp)
+                        .padding(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 0.dp)
                 )
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable { onOpenNowPlaying() }
-                        // CRITICAL (v2.5.39): gap reducido de 8dp a 4dp para acercar controles.
-                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                        // CRITICAL (v2.5.40): gap reducido al mínimo entre timeline y controles.
+                        .padding(start = 12.dp, end = 12.dp, top = 0.dp, bottom = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     AlbumArt(song = current, size = 40.dp)
@@ -183,7 +183,7 @@ fun SeekSlider(
     val density = LocalDensity.current
     val thumbRadiusPx = with(density) { 8.dp.toPx() }  // 16dp diámetro
     val trackHeightPx = with(density) { 3.dp.toPx() }   // 3dp alto del track
-    val touchTargetHeightDp = 24.dp  // alto del área táctil (más grande que el track para fácil agarrar)
+    val touchTargetHeightDp = 16.dp  // alto compacto para acercar timeline y controles
 
     // State local para el drag
     var isDragging by remember { mutableStateOf(false) }

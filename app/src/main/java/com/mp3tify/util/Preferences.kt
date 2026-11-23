@@ -1,6 +1,7 @@
 package com.mp3tify.util
 
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -10,6 +11,9 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
@@ -51,9 +55,29 @@ object Preferences {
     // CRITICAL (v2.5.39): la pestaña "todas las canciones" se abre por defecto.
     private const val DEFAULT_ALL_SONGS_EXPANDED = true
 
+    private const val UI_CACHE_PREFS = "mp3tify_ui_cache"
+    private var uiCache: SharedPreferences? = null
+
+    private val _libraryViewMode = MutableStateFlow(DEFAULT_LIBRARY_VIEW_MODE)
+    val libraryViewModeState: StateFlow<String> = _libraryViewMode.asStateFlow()
+
+    private val _playlistViewMode = MutableStateFlow(DEFAULT_PLAYLIST_VIEW_MODE)
+    val playlistViewModeState: StateFlow<String> = _playlistViewMode.asStateFlow()
+
+    private val _allSongsExpanded = MutableStateFlow(DEFAULT_ALL_SONGS_EXPANDED)
+    val allSongsExpandedState: StateFlow<Boolean> = _allSongsExpanded.asStateFlow()
+
     fun init(context: Context) {
         if (appCtx == null) {
             appCtx = context.applicationContext
+            val prefs = appCtx!!.getSharedPreferences(UI_CACHE_PREFS, Context.MODE_PRIVATE)
+            uiCache = prefs
+            _libraryViewMode.value =
+                prefs.getString(KEY_LIBRARY_VIEW_MODE, DEFAULT_LIBRARY_VIEW_MODE) ?: DEFAULT_LIBRARY_VIEW_MODE
+            _playlistViewMode.value =
+                prefs.getString(KEY_PLAYLIST_VIEW_MODE, DEFAULT_PLAYLIST_VIEW_MODE) ?: DEFAULT_PLAYLIST_VIEW_MODE
+            _allSongsExpanded.value =
+                prefs.getBoolean(KEY_ALL_SONGS_EXPANDED, DEFAULT_ALL_SONGS_EXPANDED)
         }
     }
 
@@ -201,8 +225,9 @@ object Preferences {
         }
     }
 
-    // CRITICAL (v2.5.39): persistir vista lista/cuadrícula (sincroniza UI entre sesiones).
     suspend fun setLibraryViewMode(value: String) {
+        _libraryViewMode.value = value
+        uiCache?.edit()?.putString(KEY_LIBRARY_VIEW_MODE, value)?.apply()
         try {
             ctx().mp3tifyDataStore.edit { it[stringPreferencesKey(KEY_LIBRARY_VIEW_MODE)] = value }
         } catch (e: Exception) {
@@ -211,6 +236,8 @@ object Preferences {
     }
 
     suspend fun setPlaylistViewMode(value: String) {
+        _playlistViewMode.value = value
+        uiCache?.edit()?.putString(KEY_PLAYLIST_VIEW_MODE, value)?.apply()
         try {
             ctx().mp3tifyDataStore.edit { it[stringPreferencesKey(KEY_PLAYLIST_VIEW_MODE)] = value }
         } catch (e: Exception) {
@@ -218,8 +245,9 @@ object Preferences {
         }
     }
 
-    // CRITICAL (v2.5.39): persistir estado abierto/cerrado de "todas las canciones".
     suspend fun setAllSongsExpanded(value: Boolean) {
+        _allSongsExpanded.value = value
+        uiCache?.edit()?.putBoolean(KEY_ALL_SONGS_EXPANDED, value)?.apply()
         try {
             ctx().mp3tifyDataStore.edit { it[booleanPreferencesKey(KEY_ALL_SONGS_EXPANDED)] = value }
         } catch (e: Exception) {

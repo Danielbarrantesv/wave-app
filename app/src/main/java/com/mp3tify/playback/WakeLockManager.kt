@@ -1,18 +1,20 @@
 package com.mp3tify.playback
 
 import android.app.Activity
+import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.PowerManager
 import android.view.WindowManager
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * Central place for the two CRITICAL playback preferences:
  *  - keepScreenOn → WindowManager FLAG_KEEP_SCREEN_ON (screen stays on while playing).
  *  - keepAppOpen → PARTIAL_WAKE_LOCK "MP3tify::BackgroundPlayback" (CPU stays awake).
- *
- * CRITICAL — Do NOT remove. keepScreenOn and keepAppOpen must both default ON (see Preferences).
  */
 object WakeLockManager {
 
@@ -21,10 +23,9 @@ object WakeLockManager {
     private var wakeLock: PowerManager.WakeLock? = null
     private var appCtx: Context? = null
 
-    /**
-     * CRITICAL — Do NOT remove. Applies WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
-     * whenever the keepScreenOn preference changes (default ON).
-     */
+    private val _deviceAdminActive = MutableStateFlow(false)
+    val deviceAdminActive: StateFlow<Boolean> = _deviceAdminActive.asStateFlow()
+
     fun applyKeepScreenOn(activity: Activity, enabled: Boolean) {
         try {
             appCtx = activity.applicationContext
@@ -38,10 +39,6 @@ object WakeLockManager {
         }
     }
 
-    /**
-     * CRITICAL — Do NOT remove. Acquires a PARTIAL_WAKE_LOCK for the keepAppOpen
-     * preference (default ON) so background playback keeps the CPU awake.
-     */
     fun acquirePartialWakeLock(context: Context? = null) {
         try {
             val ctx = context ?: appCtx ?: return
@@ -56,7 +53,6 @@ object WakeLockManager {
         }
     }
 
-    /** Releases the PARTIAL_WAKE_LOCK taken by acquirePartialWakeLock (keepAppOpen = false). */
     fun releasePartialWakeLock() {
         try {
             val lock = wakeLock
@@ -69,36 +65,55 @@ object WakeLockManager {
         }
     }
 
+    fun isDeviceAdminActive(context: Context): Boolean {
+        return try {
+            val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE)
+                    as? DevicePolicyManager ?: return false
+            val admin = ComponentName(
+                context.packageName,
+                "com.mp3tify.admin.Mp3tifyDeviceAdminReceiver"
+            )
+            dpm.isAdminActive(admin)
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    fun refreshDeviceAdminStatus(context: Context) {
+        _deviceAdminActive.value = isDeviceAdminActive(context.applicationContext)
+    }
+
     /**
-     * CRITICAL (v2.5.39 sleep timer): apaga la pantalla al expirar el temporizador.
-     *
-     * 1. Limpia FLAG_KEEP_SCREEN_ON (la pantalla puede apagarse según el timeout del sistema).
-     * 2. Libera el PARTIAL_WAKE_LOCK (CPU puede suspenderse, música ya está pausada).
-     * 3. Finaliza la Activity actual para que el sistema lleve la app a background
-     *    y la pantalla se apague naturalmente según el Display timeout del usuario.
-     *
-     * NO bloquea el dispositivo (lock screen). Para bloqueo real ver [lockScreenWithDeviceAdmin].
+     * Apaga la pantalla al expirar el sleep timer:
+     * 1. Limpia FLAG_KEEP_SCREEN_ON y baja brillo de ventana al mínimo.
+     * 2. Libera PARTIAL_WAKE_LOCK.
+     * 3. Si Device Admin está activo, ejecuta lockNow() para apagar la pantalla al instante.
+     *    Si no está activo, envía la app a segundo plano para que el sistema apague la pantalla.
      */
-    fun turnOffScreen(activity: Activity) {
+    fun turnOffScreen(activity: Activity?, appContext: Context) {
         try {
-            activity.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            activity?.let { act ->
+                act.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                val lp = act.window.attributes
+                lp.screenBrightness = 0.01f
+                act.window.attributes = lp
+            }
             releasePartialWakeLock()
-            activity.finish()
+
+            if (isDeviceAdminActive(appContext)) {
+                lockScreenWithDeviceAdmin(appContext)
+            } else {
+                activity?.moveTaskToBack(true)
+            }
         } catch (e: Exception) {
             e.printStackTrace()
         }
     }
 
-    /**
-     * CRITICAL (v2.5.39 sleep timer, OPCIONAL): bloquea el dispositivo usando DevicePolicyManager.
-     *
-     * Requiere que el usuario haya activado Device Admin para MP3tify (flujo
-     * [requestDeviceAdmin]). Si NO es admin activo, NO bloquea — usar [turnOffScreen] como fallback.
-     */
     fun lockScreenWithDeviceAdmin(context: Context) {
         try {
             val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE)
-                    as? android.app.admin.DevicePolicyManager ?: return
+                    as? DevicePolicyManager ?: return
             val admin = ComponentName(
                 context.packageName,
                 "com.mp3tify.admin.Mp3tifyDeviceAdminReceiver"
@@ -111,20 +126,17 @@ object WakeLockManager {
         }
     }
 
-    /**
-     * CRITICAL (v2.5.39 sleep timer, OPCIONAL): lanza el flujo del sistema para que el
-     * usuario conceda Device Admin a MP3tify. Solo necesario si se quiere bloqueo real.
-     */
     fun requestDeviceAdmin(activity: Activity) {
         try {
-            val intent = Intent(android.app.admin.DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN)
+            val intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN)
             val admin = ComponentName(
                 activity.packageName,
                 "com.mp3tify.admin.Mp3tifyDeviceAdminReceiver"
             )
+            intent.putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, admin)
             intent.putExtra(
-                android.app.admin.DevicePolicyManager.EXTRA_DEVICE_ADMIN,
-                admin
+                DevicePolicyManager.EXTRA_ADD_EXPLANATION,
+                "Permite que Wave apague la pantalla automáticamente cuando termine el temporizador de sueño."
             )
             activity.startActivity(intent)
         } catch (e: Exception) {
