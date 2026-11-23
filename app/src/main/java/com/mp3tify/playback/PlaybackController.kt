@@ -902,6 +902,29 @@ object PlaybackController {
         } catch (e: Exception) { e.printStackTrace(); 0 }
     }
 
+    fun removeSongFromQueue(songId: Long) {
+        mainScope.launch {
+            try {
+                val cur = _state.value.playlist; if (cur.none { it.id == songId }) return@launch
+                val next = cur.filterNot { it.id == songId }
+                if (next.isEmpty()) { stop(); return@launch }
+                val p = player
+                if (p != null) { for (i in (p.mediaItemCount - 1) downTo 0) { if (p.getMediaItemAt(i).mediaId == songId.toString()) p.removeMediaItem(i) } }
+                _state.value = _state.value.copy(playlist = next)
+                saveQueueToPrefs(next, (p?.currentMediaItemIndex ?: 0).coerceIn(0, next.size - 1)); refreshState()
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    fun updateSongInQueue(songId: Long, newPath: String, newName: String) {
+        mainScope.launch {
+            try {
+                val cur = _state.value.playlist; if (cur.none { it.id == songId }) return@launch
+                _state.value = _state.value.copy(playlist = cur.map { if (it.id == songId) it.copy(filePath = newPath, fileName = newName) else it })
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
     suspend fun currentPosition(): Long = withContext(Dispatchers.Main) {
         try { player?.currentPosition ?: 0L } catch (e: Exception) { 0L }
     }

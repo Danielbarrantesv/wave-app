@@ -179,6 +179,10 @@ class Repository private constructor(private val context: Context) {
         }
     }
 
+    suspend fun updateMovedSong(songId: Long, filePath: String, fileName: String) {
+        try { songDao.getById(songId)?.let { songDao.update(it.copy(filePath = filePath, fileName = fileName)) } } catch (e: Exception) { e.printStackTrace() }
+    }
+
     suspend fun updateSongPaths(songId: Long, filePath: String, artUri: String?) {
         try {
             songDao.updateSongPaths(songId, filePath, artUri)

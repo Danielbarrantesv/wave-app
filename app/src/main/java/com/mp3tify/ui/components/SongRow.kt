@@ -52,7 +52,8 @@ fun SongRow(
     onAddToPlaylist: () -> Unit = {},
     onEditInfo: () -> Unit = {},
     onDelete: () -> Unit = {},
-    isPlaying: Boolean = false
+    isPlaying: Boolean = false,
+    onOpenMenu: (() -> Unit)? = null
 ) {
     var menuOpen by remember { mutableStateOf(false) }
 
@@ -104,7 +105,7 @@ fun SongRow(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Box {
-            IconButton(onClick = { menuOpen = true }) {
+            IconButton(onClick = { if (onOpenMenu != null) onOpenMenu() else menuOpen = true }) {
                 Icon(Icons.Filled.MoreVert, contentDescription = t("more_options"))
             }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {

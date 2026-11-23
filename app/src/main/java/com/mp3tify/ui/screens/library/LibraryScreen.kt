@@ -7,7 +7,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -109,6 +111,7 @@ import com.mp3tify.ui.components.ScrollbarLazyColumn
 import com.mp3tify.ui.components.SleepTimerDialog
 import com.mp3tify.ui.components.rememberAutoHideToolbar
 import com.mp3tify.ui.I18n
+import com.mp3tify.ui.components.SongFileActionsHost
 import com.mp3tify.ui.components.SongRow
 import com.mp3tify.ui.t
 import com.mp3tify.ui.tf
@@ -178,6 +181,7 @@ fun LibraryScreen(
     var songForAddToPlaylist by remember { mutableStateOf<Song?>(null) }
     var songToEdit by remember { mutableStateOf<Song?>(null) }
     var songToDelete by remember { mutableStateOf<Song?>(null) }
+    var songForOptions by remember { mutableStateOf<Song?>(null) }
     var sortMenuOpen by remember { mutableStateOf(false) }
     // #1 Limpiar pagina principal: la lista completa de canciones esta colapsada
     // por defecto. Tap en el header la expande/colapsa.
@@ -572,7 +576,8 @@ fun LibraryScreen(
                                     group.forEach { song ->
                                         SongGridCard(
                                             song = song,
-                                            onClick = { vm.play(song) },
+                                            onClick = { if (selectionMode) vm.toggleSelected(song.id) else vm.play(song) },
+                                            onLongClick = { if (selectionMode) vm.toggleSelected(song.id) else songForOptions = song },
                                             modifier = Modifier.weight(1f),
                                             isPlaying = song.id == playbackState.playlist.getOrNull(playbackState.currentWindow)?.id,
                                             artSize = if (isLandscape) 90.dp else 120.dp
@@ -602,7 +607,8 @@ fun LibraryScreen(
                                                 vm.play(song)
                                             }
                                         },
-                                        onLongClick = { vm.toggleSelected(song.id) },
+                                        onLongClick = { if (selectionMode) vm.toggleSelected(song.id) else songForOptions = song },
+                                        onOpenMenu = { songForOptions = song },
                                     onToggleFavorite = { vm.toggleFavorite(song) },
                                     isPlaying = song.id == playbackState.playlist.getOrNull(playbackState.currentWindow)?.id,
                                     onAddToPlaylist = {
@@ -857,6 +863,16 @@ fun LibraryScreen(
             }
         )
     }
+    SongFileActionsHost(
+        songForOptions = songForOptions,
+        onDismissOptions = { songForOptions = null },
+        onToggleFavorite = { vm.toggleFavorite(it) },
+        onAddToPlaylist = { songForAddToPlaylist = it; showAddToPlaylistDialog = true },
+        onEditInfo = { songToEdit = it },
+        onDeleteFromApp = { songToDelete = it },
+        onSelect = { vm.toggleSelected(it.id) },
+        snackbarHostState = snackbarHostState
+    )
 }
 
 @Composable
@@ -1092,7 +1108,7 @@ private fun RecentlyPlayedCard(
     Column(
         modifier = Modifier
             .width(112.dp)
-            .clickable { onClick() },
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         AlbumArt(song = song, size = 112.dp)
@@ -1589,10 +1605,12 @@ enum class ViewMode { LIST, GRID }
 // - Sombra ligera (tonalElevation)
 // - Borde del color primario + título bold cuando la canción está sonando
 // - Tamaños adaptables (artSize param para landscape)
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SongGridCard(
     song: Song,
     onClick: () -> Unit,
+    onLongClick: () -> Unit = {},
     modifier: Modifier = Modifier,
     isPlaying: Boolean = false,
     artSize: androidx.compose.ui.unit.Dp = 100.dp

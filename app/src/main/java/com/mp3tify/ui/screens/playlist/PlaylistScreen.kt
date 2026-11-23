@@ -5,7 +5,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -86,6 +88,7 @@ import com.mp3tify.ui.components.ScrollbarLazyColumn
 import com.mp3tify.ui.components.SleepTimerDialog
 import com.mp3tify.ui.components.rememberAutoHideToolbar
 import com.mp3tify.ui.I18n
+import com.mp3tify.ui.components.SongFileActionsHost
 import com.mp3tify.ui.components.SongRow
 import com.mp3tify.ui.t
 import com.mp3tify.ui.tf
@@ -124,6 +127,7 @@ fun PlaylistScreen(
     var showRename by remember { mutableStateOf(false) }
     var showDelete by remember { mutableStateOf(false) }
     var songToDelete by remember { mutableStateOf<Song?>(null) }
+    var songForOptions by remember { mutableStateOf<Song?>(null) }
     // #2 State para los dialogs de "Add to playlist" y "Edit info" que ahora sí
     // funcionan desde el menu de 3 puntos de cada SongRow.
     var songForAddToPlaylist by remember { mutableStateOf<Song?>(null) }
@@ -447,7 +451,8 @@ fun PlaylistScreen(
                                 group.forEach { song ->
                                     PlaylistSongGridCard(
                                         song = song,
-                                        onClick = { vm.play(song) },
+                                        onClick = { if (selectionMode) vm.toggleSelected(song.id) else vm.play(song) },
+                                        onLongClick = { if (selectionMode) vm.toggleSelected(song.id) else songForOptions = song },
                                         modifier = Modifier.weight(1f),
                                         isPlaying = song.id == playbackState.playlist.getOrNull(playbackState.currentWindow)?.id
                                     )
@@ -476,7 +481,8 @@ fun PlaylistScreen(
                                         vm.play(song)
                                     }
                                 },
-                                onLongClick = { vm.toggleSelected(song.id) },
+                                onLongClick = { if (selectionMode) vm.toggleSelected(song.id) else songForOptions = song },
+                                onOpenMenu = { songForOptions = song },
                                 onToggleFavorite = { vm.toggleFavorite(song) },
                                 isPlaying = song.id == playbackState.playlist.getOrNull(playbackState.currentWindow)?.id,
                                 // #2 FIX: onAddToPlaylist y onEditInfo estaban vacios ({ }).
@@ -760,6 +766,16 @@ fun PlaylistScreen(
             onDismiss = { showSleepTimerDialog = false }
         )
     }
+    SongFileActionsHost(
+        songForOptions = songForOptions,
+        onDismissOptions = { songForOptions = null },
+        onToggleFavorite = { vm.toggleFavorite(it) },
+        onAddToPlaylist = { songForAddToPlaylist = it; showAddToPlaylistDialog = true },
+        onEditInfo = { songToEdit = it },
+        onDeleteFromApp = { songToDelete = it },
+        onSelect = { vm.toggleSelected(it.id) },
+        snackbarHostState = snackbarHostState
+    )
 }
 
 /**
@@ -851,17 +867,19 @@ private fun PlaylistSelectionBanner(
 }
 
 // CRITICAL (v2.5.36): SongGridCard para PlaylistScreen — diseño simple con efecto sonando
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun PlaylistSongGridCard(
     song: com.mp3tify.data.model.Song,
     onClick: () -> Unit,
+    onLongClick: () -> Unit = {},
     modifier: Modifier = Modifier,
     isPlaying: Boolean = false
 ) {
     Column(
         modifier = modifier
             .padding(4.dp)
-            .clickable { onClick() },
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         com.mp3tify.ui.components.AlbumArt(song = song, size = 120.dp)
