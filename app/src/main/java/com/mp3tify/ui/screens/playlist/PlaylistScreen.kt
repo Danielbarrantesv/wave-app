@@ -1,6 +1,7 @@
 package com.mp3tify.ui.screens.playlist
 
 import android.content.Intent
+import android.content.res.Configuration
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -71,6 +72,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -122,7 +124,8 @@ fun PlaylistScreen(
     // CRITICAL (v2.5.40): caché síncrona instantánea para vista lista/cuadrícula en playlists.
     val playlistViewMode by Preferences.playlistViewModeState.collectAsState()
     val isGridView = playlistViewMode == "GRID"
-    val songChunks = remember(songs) { songs.chunked(3) }
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val songChunks = remember(songs, isLandscape) { songs.chunked(if (isLandscape) 5 else 3) }
     var showSleepTimerDialog by remember { mutableStateOf(false) }
     val sleepTimerMinutes by SleepTimerManager.activeMinutes.collectAsState()
     var showRename by remember { mutableStateOf(false) }
@@ -290,7 +293,7 @@ fun PlaylistScreen(
                 // Esconde la toolbar (count + grid toggle + sleep timer) al hacer scroll
                 // hacia abajo, la muestra al hacer scroll hacia arriba.
                 val scrollState = rememberLazyListState()
-                Box(Modifier.weight(1f).fillMaxWidth()) {
+                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
                 ScrollbarLazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     state = scrollState,
@@ -420,10 +423,11 @@ fun PlaylistScreen(
                                         onClick = { if (selectionMode) vm.toggleSelected(song.id) else vm.play(song) },
                                         onLongClick = { if (selectionMode) vm.toggleSelected(song.id) else songForOptions = song },
                                         modifier = Modifier.weight(1f),
-                                        isPlaying = song.id == currentSongId
+                                        isPlaying = song.id == currentSongId,
+                                        artSize = if (isLandscape) 88.dp else 120.dp
                                     )
                                 }
-                                repeat(3 - group.size) { Spacer(Modifier.weight(1f)) }
+                                repeat((if (isLandscape) 5 else 3) - group.size) { Spacer(Modifier.weight(1f)) }
                             }
                         }
                     } else {
@@ -465,7 +469,7 @@ fun PlaylistScreen(
                     } // closes else (isGridView)
                 }
                 }
-                AutoHideCountToolbar(scrollState = scrollState, count = songs.size, isGrid = isGridView, onToggleView = { scope.launch { Preferences.setPlaylistViewMode(if (!isGridView) "GRID" else "LIST") } }, sleepTimerActive = sleepTimerMinutes > 0, onOpenSleepTimer = { showSleepTimerDialog = true }, modifier = Modifier.align(Alignment.TopCenter))
+                AutoHideCountToolbar(scrollState = scrollState, count = songs.size, isGrid = isGridView, onToggleView = { scope.launch { Preferences.setPlaylistViewMode(if (!isGridView) "GRID" else "LIST") } }, sleepTimerActive = sleepTimerMinutes > 0, onOpenSleepTimer = { showSleepTimerDialog = true })
                 }
             }
         }
@@ -842,7 +846,8 @@ private fun PlaylistSongGridCard(
     onClick: () -> Unit,
     onLongClick: () -> Unit = {},
     modifier: Modifier = Modifier,
-    isPlaying: Boolean = false
+    isPlaying: Boolean = false,
+    artSize: androidx.compose.ui.unit.Dp = 120.dp
 ) {
     Column(
         modifier = modifier
@@ -850,7 +855,7 @@ private fun PlaylistSongGridCard(
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        com.mp3tify.ui.components.AlbumArt(song = song, size = 120.dp)
+        com.mp3tify.ui.components.AlbumArt(song = song, size = artSize)
         Spacer(Modifier.height(4.dp))
         Text(
             song.displayTitle,

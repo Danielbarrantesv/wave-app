@@ -60,7 +60,7 @@ import com.mp3tify.ui.t
 @Composable
 fun LivePlayerBar(onOpenNowPlaying: () -> Unit) {
     val meta by PlaybackController.barMeta.collectAsState()
-    val compatState = remember(meta) { PlaybackState(isPlaying = meta.isPlaying, currentWindow = if (meta.currentSong != null) 0 else -1, durationMs = meta.durationMs, playlist = if (meta.currentSong != null) listOf(meta.currentSong) else emptyList()) }
+    val compatState = remember(meta) { PlaybackState(isPlaying = meta.isPlaying, currentWindow = if (meta.currentSong != null) 0 else -1, durationMs = meta.durationMs, playlist = listOfNotNull(meta.currentSong)) }
     PlayerBar(state = compatState, onOpenNowPlaying = onOpenNowPlaying, livePosition = true)
 }
 @Composable

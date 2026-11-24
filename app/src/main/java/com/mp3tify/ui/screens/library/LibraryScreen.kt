@@ -320,9 +320,9 @@ fun LibraryScreen(
                 val scrollState = rememberLazyListState()
                 val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
                 val artistsWithMultiple = remember(artists) { artists.filter { it.songs.size > 1 } }
-                val songChunks = remember(songs, isLandscape) { songs.chunked(if (isLandscape) 4 else 3) }
+                val songChunks = remember(songs, isLandscape) { songs.chunked(if (isLandscape) 5 else 3) }
 
-                Box(Modifier.weight(1f).fillMaxWidth()) {
+                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
                 Row(Modifier.fillMaxSize()) {
                     if (isLandscape) {
                         // Panel izquierdo: playlists en vertical (scroll independiente)
@@ -543,10 +543,10 @@ fun LibraryScreen(
                                             onLongClick = { if (selectionMode) vm.toggleSelected(song.id) else songForOptions = song },
                                             modifier = Modifier.weight(1f),
                                             isPlaying = song.id == currentSongId,
-                                            artSize = if (isLandscape) 90.dp else 120.dp
+                                            artSize = if (isLandscape) 76.dp else 120.dp
                                         )
                                     }
-                                    repeat((if (isLandscape) 4 else 3) - group.size) { Spacer(Modifier.weight(1f)) }
+                                    repeat((if (isLandscape) 5 else 3) - group.size) { Spacer(Modifier.weight(1f)) }
                                 }
                             }
                         } else {
@@ -588,7 +588,7 @@ fun LibraryScreen(
                 }
                 // CRITICAL (v2.5.34): toolbar movida arriba (fija) antes del LazyColumn
             }
-                AutoHideCountToolbar(scrollState = scrollState, count = songs.size, isGrid = viewMode == ViewMode.GRID, onToggleView = { val next = if (viewMode == ViewMode.LIST) ViewMode.GRID else ViewMode.LIST; scope.launch { Preferences.setLibraryViewMode(next.name) } }, sleepTimerActive = sleepTimerMinutes > 0, onOpenSleepTimer = { showSleepTimerDialog = true }, modifier = Modifier.align(Alignment.TopCenter))
+                AutoHideCountToolbar(scrollState = scrollState, count = songs.size, isGrid = viewMode == ViewMode.GRID, onToggleView = { val next = if (viewMode == ViewMode.LIST) ViewMode.GRID else ViewMode.LIST; scope.launch { Preferences.setLibraryViewMode(next.name) } }, sleepTimerActive = sleepTimerMinutes > 0, onOpenSleepTimer = { showSleepTimerDialog = true })
                 }
                 } // closes Column added for fixed SelectionBanner
         }
