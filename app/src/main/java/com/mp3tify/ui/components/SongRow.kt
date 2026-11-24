@@ -108,7 +108,7 @@ fun SongRow(
             IconButton(onClick = { if (onOpenMenu != null) onOpenMenu() else menuOpen = true }) {
                 Icon(Icons.Filled.MoreVert, contentDescription = t("more_options"))
             }
-            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            if (onOpenMenu == null) DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                 DropdownMenuItem(
                     text = { Text(if (song.isFavorite) t("remove_from_favorites") else t("add_to_favorites")) },
                     onClick = {

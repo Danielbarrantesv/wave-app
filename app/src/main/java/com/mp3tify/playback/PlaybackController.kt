@@ -46,6 +46,8 @@ data class PlaybackState(
     val repeatAll: Boolean = false
 )
 
+data class PlayerBarMeta(val currentSong: Song? = null, val isPlaying: Boolean = false, val durationMs: Long = 0L)
+
 object PlaybackController {
 
     private var player: Player? = null
@@ -57,6 +59,10 @@ object PlaybackController {
     val state: StateFlow<PlaybackState> = _state.asStateFlow()
     private val _currentSongId = MutableStateFlow<Long?>(null)
     val currentSongId: StateFlow<Long?> = _currentSongId.asStateFlow()
+    private val _barMeta = MutableStateFlow(PlayerBarMeta())
+    val barMeta: StateFlow<PlayerBarMeta> = _barMeta.asStateFlow()
+    private val _positionMs = MutableStateFlow(0L)
+    val positionMs: StateFlow<Long> = _positionMs.asStateFlow()
 
     private var pollJob: Job? = null
     private var lastRecordedWindow = -1
@@ -155,6 +161,7 @@ object PlaybackController {
                 }
                 override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                     refreshState()
+                    val w = p.currentMediaItemIndex; val song = _state.value.playlist.getOrNull(w); if (song != null) ioScope.launch { toArtworkUri(song, grantSystemUi = true) }
                     maybeRecordPlay()
                     // CRITICAL FIX (loop infinito): resetear la flag de error permanente
                     // al cambiar de canción — la nueva canción puede ser accesible.
@@ -296,6 +303,9 @@ object PlaybackController {
             )
             val newSongId = if (p.mediaItemCount == 0) null else _state.value.playlist.getOrNull(window)?.id
             if (_currentSongId.value != newSongId) _currentSongId.value = newSongId
+            val curSong = if (p.mediaItemCount == 0) null else _state.value.playlist.getOrNull(window)
+            _positionMs.value = p.currentPosition.coerceAtLeast(0L)
+            _barMeta.value = PlayerBarMeta(curSong, p.isPlaying, p.duration.coerceAtLeast(0L))
             // EQ attach ahora se hace via Player.Listener.onAudioSessionIdChanged (ver connect()).
             // Ya no hacemos polling aquí.
         } catch (e: Exception) {
@@ -308,13 +318,22 @@ object PlaybackController {
         if (pollJob?.isActive == true) return
         pollJob = mainScope.launch {
             while (isActive) {
-                refreshState()
+                pollPosition()
                 // #3 Optimización segundo plano: 500ms en lugar de 200ms reduce CPU/battery
                 // usage durante playback prolongado sin afectar UX visible (la barra de
                 // progreso aún se actualiza 2x por segundo, suficiente para sentir smooth).
                 delay(500)
             }
         }
+    }
+    private fun pollPosition() {
+        val p = player ?: return
+        try {
+            val pos = p.currentPosition.coerceAtLeast(0L); _positionMs.value = pos
+            val st = _state.value; val curWin = if (p.mediaItemCount == 0) -1 else p.currentMediaItemIndex; val curDur = p.duration.coerceAtLeast(0L)
+            if (p.isPlaying != st.isPlaying || curWin != st.currentWindow || curDur != st.durationMs) refreshState()
+            else if (st.positionMs != pos) _state.value = st.copy(positionMs = pos)
+        } catch (e: Exception) { e.printStackTrace(); stopPolling() }
     }
     private fun stopPolling() {
         pollJob?.cancel()
@@ -431,7 +450,7 @@ object PlaybackController {
         if (p.mediaItemCount > 0) ensureServiceRunning(true)
     }
 
-    private fun toArtworkUri(song: Song): android.net.Uri? {
+    private fun toArtworkUri(song: Song, grantSystemUi: Boolean = false): android.net.Uri? {
         val artPath = song.artUri?.takeIf { it.isNotBlank() } ?: return null
         if (artPath.startsWith("content://") || artPath.startsWith("file://")) {
             return try { android.net.Uri.parse(artPath) } catch (_: Exception) { null }
@@ -441,7 +460,7 @@ object PlaybackController {
         return try {
             val ctx = appCtx ?: return null
             val uri = androidx.core.content.FileProvider.getUriForFile(ctx, "${ctx.packageName}.artwork", artFile)
-            try { ctx.grantUriPermission("com.android.systemui", uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
+            if (grantSystemUi) try { ctx.grantUriPermission("com.android.systemui", uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
             uri
         } catch (e: Exception) { e.printStackTrace(); null }
     }
@@ -455,20 +474,21 @@ object PlaybackController {
         _state.value = _state.value.copy(playlist = songs)
         val safeIndex = startIndex.coerceIn(0, songs.size - 1)
         _currentSongId.value = songs.getOrNull(safeIndex)?.id
+        _barMeta.value = PlayerBarMeta(songs.getOrNull(safeIndex), _state.value.isPlaying, songs.getOrNull(safeIndex)?.durationMs ?: 0L)
         lastRecordedWindow = -1
         // Guardar cola para restaurar despues de process kill (#2 queue persistence)
         saveQueueToPrefs(songs, safeIndex)
 
         ioScope.launch {
             try {
-                val items = songs.map { s ->
+                val items = songs.mapIndexed { idx, s ->
                     val metadataBuilder = MediaMetadata.Builder()
                         .setTitle(s.displayTitle)
                         .setArtist(s.displayArtist)
                         .setAlbumTitle(s.displayAlbum)
                     // toArtworkUri hace File.exists() — disk I/O pesado con muchas canciones.
                     // Ahora corre en IO thread.
-                    toArtworkUri(s)?.let { metadataBuilder.setArtworkUri(it) }
+                    toArtworkUri(s, grantSystemUi = (idx == safeIndex))?.let { metadataBuilder.setArtworkUri(it) }
                     MediaItem.Builder()
                         .setUri(toMediaUri(s.filePath))
                         .setMediaId(s.id.toString())
@@ -755,13 +775,13 @@ object PlaybackController {
             p.stop()
             p.clearMediaItems()
             _state.value = PlaybackState()
-            _currentSongId.value = null
+            _currentSongId.value = null; _positionMs.value = 0L; _barMeta.value = PlayerBarMeta()
         } catch (e: Exception) {
             e.printStackTrace()
             try { player?.release() } catch (_: Exception) {}
             player = null
             _state.value = PlaybackState()
-            _currentSongId.value = null
+            _currentSongId.value = null; _positionMs.value = 0L; _barMeta.value = PlayerBarMeta()
         }
     }
 

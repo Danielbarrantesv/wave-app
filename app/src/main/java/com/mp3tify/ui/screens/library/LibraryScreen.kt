@@ -109,7 +109,7 @@ import com.mp3tify.ui.components.CollageCover
 import com.mp3tify.ui.components.LivePlayerBar
 import com.mp3tify.ui.components.ScrollbarLazyColumn
 import com.mp3tify.ui.components.SleepTimerDialog
-import com.mp3tify.ui.components.rememberAutoHideToolbar
+import com.mp3tify.ui.components.AutoHideCountToolbar
 import com.mp3tify.ui.I18n
 import com.mp3tify.ui.components.SongFileActionsHost
 import com.mp3tify.ui.components.SongRow
@@ -318,48 +318,12 @@ fun LibraryScreen(
                 // CRITICAL (v2.5.38): toolbar con auto-hide — se esconde al hacer scroll
                 // hacia abajo y aparece al hacer scroll hacia arriba.
                 val scrollState = rememberLazyListState()
-                val isToolbarVisible = rememberAutoHideToolbar(scrollState)
-                AnimatedVisibility(visible = isToolbarVisible) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        "${songs.size} canciones",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f)
-                    )
-                    // Toggle vista lista/cuadrícula
-                    IconButton(onClick = {
-                        val next = if (viewMode == ViewMode.LIST) ViewMode.GRID else ViewMode.LIST
-                        scope.launch { Preferences.setLibraryViewMode(next.name) }
-                    }) {
-                        Icon(
-                            if (viewMode == ViewMode.LIST) Icons.Filled.Apps else Icons.Filled.List,
-                            contentDescription = if (viewMode == ViewMode.LIST) "Vista cuadrícula" else "Vista lista",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    // Sleep timer
-                    IconButton(onClick = { showSleepTimerDialog = true }) {
-                        Icon(
-                            Icons.Filled.Schedule,
-                            contentDescription = "Temporizador de sueño",
-                            tint = if (sleepTimerMinutes > 0) MaterialTheme.colorScheme.primary
-                                   else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                }
-
                 val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
                 val artistsWithMultiple = remember(artists) { artists.filter { it.songs.size > 1 } }
                 val songChunks = remember(songs, isLandscape) { songs.chunked(if (isLandscape) 4 else 3) }
 
-                Row(Modifier.weight(1f).fillMaxWidth()) {
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                Row(Modifier.fillMaxSize()) {
                     if (isLandscape) {
                         // Panel izquierdo: playlists en vertical (scroll independiente)
                         LazyColumn(
@@ -389,7 +353,7 @@ fun LibraryScreen(
                     ScrollbarLazyColumn(
                         modifier = if (isLandscape) Modifier.weight(0.75f).fillMaxHeight() else Modifier.fillMaxSize(),
                         state = scrollState,
-                        contentPadding = PaddingValues(bottom = 96.dp)
+                        contentPadding = PaddingValues(top = 48.dp, bottom = 96.dp)
                     ) {
                 item {
                     // #2 Header horizontal: portada IZQ + titulo + count DER + chevron
@@ -624,6 +588,8 @@ fun LibraryScreen(
                 }
                 // CRITICAL (v2.5.34): toolbar movida arriba (fija) antes del LazyColumn
             }
+                AutoHideCountToolbar(scrollState = scrollState, count = songs.size, isGrid = viewMode == ViewMode.GRID, onToggleView = { val next = if (viewMode == ViewMode.LIST) ViewMode.GRID else ViewMode.LIST; scope.launch { Preferences.setLibraryViewMode(next.name) } }, sleepTimerActive = sleepTimerMinutes > 0, onOpenSleepTimer = { showSleepTimerDialog = true }, modifier = Modifier.align(Alignment.TopCenter))
+                }
                 } // closes Column added for fixed SelectionBanner
         }
 

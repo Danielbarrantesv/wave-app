@@ -59,14 +59,37 @@ import com.mp3tify.ui.t
  */
 @Composable
 fun LivePlayerBar(onOpenNowPlaying: () -> Unit) {
-    val state by PlaybackController.state.collectAsState()
-    PlayerBar(state = state, onOpenNowPlaying = onOpenNowPlaying)
+    val meta by PlaybackController.barMeta.collectAsState()
+    val compatState = remember(meta) { PlaybackState(isPlaying = meta.isPlaying, currentWindow = if (meta.currentSong != null) 0 else -1, durationMs = meta.durationMs, playlist = if (meta.currentSong != null) listOf(meta.currentSong) else emptyList()) }
+    PlayerBar(state = compatState, onOpenNowPlaying = onOpenNowPlaying, livePosition = true)
+}
+@Composable
+private fun LiveSeekSlider(durationMs: Long, modifier: Modifier = Modifier) {
+    val posState = PlaybackController.positionMs.collectAsState()
+    val pc = MaterialTheme.colorScheme.primary; val oc = MaterialTheme.colorScheme.outline; val d = LocalDensity.current
+    val tr = remember(d) { with(d) { 8.dp.toPx() } }; val th = remember(d) { with(d) { 3.dp.toPx() } }
+    var drag by remember { mutableStateOf(false) }; var dv by remember { mutableStateOf(0f) }
+    Canvas(modifier = modifier.height(16.dp).pointerInput(durationMs) {
+        detectHorizontalDragGestures(
+            onDragStart = { o -> if (durationMs > 0) { drag = true; dv = (o.x / size.width).coerceIn(0f, 1f) } },
+            onHorizontalDrag = { ch, da -> if (drag) { ch.consume(); dv = (dv + da / size.width).coerceIn(0f, 1f) } },
+            onDragEnd = { if (drag) { drag = false; try { PlaybackController.seekTo((dv * durationMs).toLong()) } catch (e: Exception) { e.printStackTrace() } } },
+            onDragCancel = { drag = false }
+        )
+    }) {
+        val v = if (drag) dv else if (durationMs > 0) (posState.value.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
+        val w = size.width; val cy = size.height / 2f
+        drawRoundRect(color = oc, topLeft = Offset(0f, cy - th / 2), size = Size(w, th), cornerRadius = CornerRadius(th / 2))
+        if (v * w > 0f) drawRoundRect(color = pc, topLeft = Offset(0f, cy - th / 2), size = Size(v * w, th), cornerRadius = CornerRadius(th / 2))
+        drawCircle(color = pc, radius = tr, center = Offset(v * w, cy))
+    }
 }
 
 @Composable
 fun PlayerBar(
     state: PlaybackState,
-    onOpenNowPlaying: () -> Unit
+    onOpenNowPlaying: () -> Unit,
+    livePosition: Boolean = false
 ) {
     val current = state.playlist.getOrNull(state.currentWindow)
 
@@ -74,13 +97,6 @@ fun PlayerBar(
     // PlaybackState. != null = está arrastrando, usa el valor local para evitar
     // jitter mientras seekTo se hace efectivo.
     var seekPosition by remember { mutableStateOf<Float?>(null) }
-    val progress = if (state.durationMs > 0) {
-        (state.positionMs.toFloat() / state.durationMs).coerceIn(0f, 1f)
-    } else {
-        0f
-    }
-    val sliderValue = seekPosition ?: progress
-
     AnimatedVisibility(visible = current != null) {
         // CRITICAL #1: navigationBarsPadding() empuja el PlayerBar por encima de la
         // gestural nav bar. Sin esto, en modelos con nav bar de 3 botones o gesture
@@ -90,28 +106,12 @@ fun PlayerBar(
             modifier = Modifier.navigationBarsPadding()
         ) {
             Column {
-                // CRITICAL (v2.5.22 UI): SeekSlider custom con bolita visible siempre.
-                SeekSlider(
-                    progress = sliderValue,
-                    durationMs = state.durationMs,
-                    onSeekStart = { /* no-op */ },
-                    onSeekChange = { newValue ->
-                        if (state.durationMs > 0) {
-                            seekPosition = newValue
-                        }
-                    },
-                    onSeekEnd = {
-                        seekPosition?.let { pos ->
-                            val targetMs = (pos * state.durationMs).toLong()
-                            try { PlaybackController.seekTo(targetMs) } catch (e: Exception) { e.printStackTrace() }
-                        }
-                        seekPosition = null
-                    },
-                    // CRITICAL (v2.5.39): acortar espacio entre timeline y controles.
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 0.dp)
-                )
+                if (livePosition) {
+                    LiveSeekSlider(durationMs = state.durationMs, modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 0.dp))
+                } else {
+                    val progress = if (state.durationMs > 0) (state.positionMs.toFloat() / state.durationMs).coerceIn(0f, 1f) else 0f
+                    SeekSlider(progress = seekPosition ?: progress, durationMs = state.durationMs, onSeekStart = {}, onSeekChange = { if (state.durationMs > 0) seekPosition = it }, onSeekEnd = { seekPosition?.let { try { PlaybackController.seekTo((it * state.durationMs).toLong()) } catch (e: Exception) { e.printStackTrace() } }; seekPosition = null }, modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 0.dp))
+                }
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()

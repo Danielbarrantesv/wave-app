@@ -89,7 +89,7 @@ private fun CollageTile(song: Song?, modifier: Modifier = Modifier) {
         val path = s.artUri?.takeIf { it.isNotBlank() } ?: s.filePath
         val fallback = if (path != s.filePath) s.filePath else null
         if (path.isNotBlank()) {
-            bitmap = withContext(Dispatchers.IO) {
+            bitmap = withContext(AlbumArtCache.dispatcher) {
                 try { AlbumArtCache.decode(context, path, 256, fallback) } catch (e: Exception) { null }
             }
         }

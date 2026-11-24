@@ -21,6 +21,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import coil.request.ImageRequest
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -41,33 +43,28 @@ import java.io.File
 @Composable
 fun AlbumArt(song: Song?, size: Dp, modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    val model: Any? = remember(song?.id, song?.artUri) {
-        when {
+    val sizePx = with(LocalDensity.current) { size.roundToPx().coerceAtLeast(64) }
+    val model: Any? = remember(song?.id, song?.artUri, sizePx) {
+        val raw: Any? = when {
             song == null -> null
             song.artUri.isNullOrBlank() -> null
             song.artUri!!.startsWith("content") -> Uri.parse(song.artUri)
             song.artUri!!.startsWith("/") -> File(song.artUri!!)
             else -> song.artUri
         }
+        raw?.let { ImageRequest.Builder(context).data(it).size(sizePx).build() }
     }
+    var coilFailed by remember(song?.id, song?.artUri) { mutableStateOf(false) }
     var recoveredBitmap by remember(song?.id, song?.artUri) {
         val fp = song?.filePath
         val cached = if (song != null && song.artUri.isNullOrBlank() && !fp.isNullOrBlank()) AlbumArtCache.peek(fp, 256) else null
         mutableStateOf(cached)
     }
-    LaunchedEffect(song?.id, song?.artUri) {
+    LaunchedEffect(song?.id, song?.artUri, coilFailed) {
         val s = song ?: return@LaunchedEffect
         if (recoveredBitmap != null) return@LaunchedEffect
-        val artPath = s.artUri?.takeIf { it.isNotBlank() }
-        if (artPath != null && !artPath.startsWith("content://")) {
-            val decoded = withContext(Dispatchers.IO) {
-                if (!File(artPath).exists()) try { AlbumArtCache.decode(context, s.filePath, 256) } catch (_: Exception) { null } else null
-            }
-            if (decoded != null) recoveredBitmap = decoded
-        } else if (artPath.isNullOrBlank() && s.filePath.isNotBlank()) {
-            val decoded = withContext(Dispatchers.IO) {
-                try { AlbumArtCache.decode(context, s.filePath, 256) } catch (_: Exception) { null }
-            }
+        if ((model == null || coilFailed) && s.filePath.isNotBlank()) {
+            val decoded = withContext(AlbumArtCache.dispatcher) { try { AlbumArtCache.decode(context, s.filePath, 256) } catch (_: Exception) { null } }
             if (decoded != null) recoveredBitmap = decoded
         }
     }
@@ -81,7 +78,7 @@ fun AlbumArt(song: Song?, size: Dp, modifier: Modifier = Modifier) {
         when {
             bmp != null -> {
                 Image(
-                    bitmap = bmp.asImageBitmap(),
+                    bitmap = remember(bmp) { bmp.asImageBitmap() },
                     contentDescription = song?.displayTitle ?: "cover",
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.size(size)
@@ -90,6 +87,7 @@ fun AlbumArt(song: Song?, size: Dp, modifier: Modifier = Modifier) {
             model != null -> {
                 AsyncImage(
                     model = model,
+                    onError = { coilFailed = true },
                     contentDescription = song?.displayTitle ?: "cover",
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.size(size)

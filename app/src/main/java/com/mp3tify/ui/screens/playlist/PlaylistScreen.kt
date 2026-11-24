@@ -86,7 +86,7 @@ import com.mp3tify.ui.components.CollageCover
 import com.mp3tify.ui.components.LivePlayerBar
 import com.mp3tify.ui.components.ScrollbarLazyColumn
 import com.mp3tify.ui.components.SleepTimerDialog
-import com.mp3tify.ui.components.rememberAutoHideToolbar
+import com.mp3tify.ui.components.AutoHideCountToolbar
 import com.mp3tify.ui.I18n
 import com.mp3tify.ui.components.SongFileActionsHost
 import com.mp3tify.ui.components.SongRow
@@ -290,46 +290,11 @@ fun PlaylistScreen(
                 // Esconde la toolbar (count + grid toggle + sleep timer) al hacer scroll
                 // hacia abajo, la muestra al hacer scroll hacia arriba.
                 val scrollState = rememberLazyListState()
-                val isToolbarVisible = rememberAutoHideToolbar(scrollState)
-                // CRITICAL (v2.5.36): toolbar con toggle vista lista/grid + sleep timer
-                AnimatedVisibility(visible = isToolbarVisible) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            "${songs.size} canciones",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.weight(1f)
-                        )
-                        IconButton(onClick = {
-                            val next = !isGridView
-                            scope.launch { Preferences.setPlaylistViewMode(if (next) "GRID" else "LIST") }
-                        }) {
-                            Icon(
-                                if (isGridView) Icons.Filled.List else Icons.Filled.Apps,
-                                contentDescription = if (isGridView) "Vista lista" else "Vista cuadrícula",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        IconButton(onClick = { showSleepTimerDialog = true }) {
-                            Icon(
-                                Icons.Filled.Schedule,
-                                contentDescription = "Temporizador de sueño",
-                                tint = if (sleepTimerMinutes > 0) MaterialTheme.colorScheme.primary
-                                       else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-
+                Box(Modifier.weight(1f).fillMaxWidth()) {
                 ScrollbarLazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     state = scrollState,
-                    contentPadding = PaddingValues(bottom = 96.dp)
+                    contentPadding = PaddingValues(top = 48.dp, bottom = 96.dp)
                 ) {
                 item {
                     Column(
@@ -499,6 +464,8 @@ fun PlaylistScreen(
                     }
                     } // closes else (isGridView)
                 }
+                }
+                AutoHideCountToolbar(scrollState = scrollState, count = songs.size, isGrid = isGridView, onToggleView = { scope.launch { Preferences.setPlaylistViewMode(if (!isGridView) "GRID" else "LIST") } }, sleepTimerActive = sleepTimerMinutes > 0, onOpenSleepTimer = { showSleepTimerDialog = true }, modifier = Modifier.align(Alignment.TopCenter))
                 }
             }
         }
