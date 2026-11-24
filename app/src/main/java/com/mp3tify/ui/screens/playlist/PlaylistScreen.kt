@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -217,7 +218,7 @@ fun PlaylistScreen(
                                     leadingIcon = { Icon(Icons.Filled.MusicNote, contentDescription = null) }
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("Carpeta") },
+                                    text = { Text(t("folder")) },
                                     onClick = {
                                         menuOpen = false
                                         folderPicker.launch(null)
@@ -305,42 +306,34 @@ fun PlaylistScreen(
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 8.dp)
                     ) {
-                        CollageCover(songs = songs, seed = playlistId, size = 160.dp)
-                        Spacer(Modifier.height(12.dp))
-                        Row {
-                            Button(
-                                onClick = { vm.playAll(false) },
-                                enabled = songs.isNotEmpty()
-                            ) {
-                                Icon(Icons.Filled.PlayArrow, contentDescription = null)
-                                Spacer(Modifier.width(6.dp))
-                                Text(t("play_all"))
-                            }
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            CollageCover(songs = songs, seed = playlistId, size = if (isLandscape) 140.dp else 104.dp)
                             Spacer(Modifier.width(12.dp))
-                            OutlinedButton(
-                                onClick = { vm.playAll(true) },
-                                enabled = songs.isNotEmpty()
-                            ) {
-                                Icon(Icons.Filled.Shuffle, contentDescription = null)
-                                Spacer(Modifier.width(6.dp))
-                                Text(t("shuffle"))
-                            }
-                        }
-                        // Siempre mostrar 2 botones: agregar música + agregar carpeta.
-                        Spacer(Modifier.height(8.dp))
-                        Row {
-                            OutlinedButton(onClick = {
-                                try { filesPicker.launch("audio/*") } catch (e: Exception) { e.printStackTrace() }
-                            }) {
-                                Icon(Icons.Filled.MusicNote, contentDescription = null)
-                                Spacer(Modifier.width(6.dp))
-                                Text(t("add_music_short"))
-                            }
-                            Spacer(Modifier.width(12.dp))
-                            OutlinedButton(onClick = { folderPicker.launch(null) }) {
-                                Icon(Icons.Filled.LibraryMusic, contentDescription = null)
-                                Spacer(Modifier.width(6.dp))
-                                Text("Carpeta")
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Button(onClick = { vm.playAll(false) }, enabled = songs.isNotEmpty(), modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp)) {
+                                        Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(t("play_all"), style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
+                                    OutlinedButton(onClick = { vm.playAll(true) }, enabled = songs.isNotEmpty(), modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp)) {
+                                        Icon(Icons.Filled.Shuffle, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(t("shuffle"), style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
+                                }
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedButton(onClick = { try { filesPicker.launch("audio/*") } catch (e: Exception) { e.printStackTrace() } }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp)) {
+                                        Icon(Icons.Filled.MusicNote, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(t("add_music_short"), style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
+                                    OutlinedButton(onClick = { folderPicker.launch(null) }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp)) {
+                                        Icon(Icons.Filled.LibraryMusic, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(t("folder"), style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
+                                }
                             }
                         }
                         // #3 Sort filter en playlist: 5 opciones (Añadidas/Reproducidas/Título/Artista/Duración)

@@ -322,8 +322,7 @@ fun LibraryScreen(
                 val artistsWithMultiple = remember(artists) { artists.filter { it.songs.size > 1 } }
                 val songChunks = remember(songs, isLandscape) { songs.chunked(if (isLandscape) 5 else 3) }
 
-                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-                Row(Modifier.fillMaxSize()) {
+                Row(Modifier.weight(1f).fillMaxWidth()) {
                     if (isLandscape) {
                         // Panel izquierdo: playlists en vertical (scroll independiente)
                         LazyColumn(
@@ -350,8 +349,9 @@ fun LibraryScreen(
                         }
                     }
                     // Panel derecho (o único en portrait): contenido actual
+                    Box(modifier = (if (isLandscape) Modifier.weight(0.75f) else Modifier.weight(1f)).fillMaxHeight(), contentAlignment = Alignment.TopCenter) {
                     ScrollbarLazyColumn(
-                        modifier = if (isLandscape) Modifier.weight(0.75f).fillMaxHeight() else Modifier.fillMaxSize(),
+                        modifier = Modifier.fillMaxSize(),
                         state = scrollState,
                         contentPadding = PaddingValues(top = 48.dp, bottom = 96.dp)
                     ) {
@@ -586,10 +586,9 @@ fun LibraryScreen(
                         }
                     }
                 }
-                // CRITICAL (v2.5.34): toolbar movida arriba (fija) antes del LazyColumn
-            }
                 AutoHideCountToolbar(scrollState = scrollState, count = songs.size, isGrid = viewMode == ViewMode.GRID, onToggleView = { val next = if (viewMode == ViewMode.LIST) ViewMode.GRID else ViewMode.LIST; scope.launch { Preferences.setLibraryViewMode(next.name) } }, sleepTimerActive = sleepTimerMinutes > 0, onOpenSleepTimer = { showSleepTimerDialog = true })
                 }
+            }
                 } // closes Column added for fixed SelectionBanner
         }
 
@@ -685,7 +684,7 @@ fun LibraryScreen(
                         scope.launch {
                             try {
                                 val msg = if (total > 0) {
-                                    I18n.tf("added_songs", total) + " + ${subs.size} listas"
+                                    I18n.tf("added_songs_with_lists", total, subs.size)
                                 } else {
                                     I18n.t("no_music_found")
                                 }

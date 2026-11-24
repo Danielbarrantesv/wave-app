@@ -42,8 +42,8 @@ fun ProvideAppLanguage(content: @Composable () -> Unit) {
 
 /** Translate [key] in the current app language (Composable). */
 @Composable
-fun t(key: String): String = I18n.t(key)
+fun t(key: String): String = Strings.t(key, LocalAppLanguage.current)
 
 /** Translate with placeholders (Composable). */
 @Composable
-fun tf(key: String, vararg args: Any): String = I18n.tf(key, *args)
+fun tf(key: String, vararg args: Any): String = Strings.f(key, LocalAppLanguage.current, *args)

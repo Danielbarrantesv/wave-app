@@ -33,6 +33,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.mp3tify.ui.tf
 
 @Composable
 fun ScrollbarLazyColumn(modifier: Modifier = Modifier, state: LazyListState = rememberLazyListState(), contentPadding: PaddingValues = PaddingValues(0.dp), verticalArrangement: androidx.compose.foundation.layout.Arrangement.Vertical = androidx.compose.foundation.layout.Arrangement.Top, content: LazyListScope.() -> Unit) {
@@ -46,7 +47,7 @@ fun rememberAutoHideToolbar(scrollState: LazyListState, thresholdPx: Int = 28): 
         var prevIndex = scrollState.firstVisibleItemIndex; var prevOffset = scrollState.firstVisibleItemScrollOffset
         snapshotFlow { (scrollState.firstVisibleItemIndex.toLong() shl 32) or (scrollState.firstVisibleItemScrollOffset.toLong() and 0xFFFFFFFFL) }.collect { packed ->
             val index = (packed shr 32).toInt(); val offset = packed.toInt()
-            if (index == 0 && offset == 0) isVisible = true
+            if ((index == 0 && offset == 0) || !scrollState.canScrollBackward) isVisible = true
             else if (scrollState.isScrollInProgress) {
                 if (index != prevIndex) isVisible = index < prevIndex
                 else { val d = offset - prevOffset; if (d > thresholdPx) isVisible = false else if (d < -thresholdPx) isVisible = true }
@@ -63,7 +64,7 @@ fun AutoHideCountToolbar(scrollState: LazyListState, count: Int, isGrid: Boolean
     AnimatedVisibility(visible = visible, enter = slideInVertically { -it } + fadeIn(), exit = slideOutVertically { -it } + fadeOut(), modifier = modifier) {
         Surface(color = MaterialTheme.colorScheme.background.copy(alpha = 0.96f)) {
             Row(modifier = Modifier.fillMaxWidth().height(48.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("$count canciones", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                Text(tf("songs_count", count), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
                 IconButton(onClick = onToggleView) { Icon(if (isGrid) Icons.Filled.List else Icons.Filled.Apps, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
                 IconButton(onClick = onOpenSleepTimer) { Icon(Icons.Filled.Schedule, contentDescription = null, tint = if (sleepTimerActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant) }
             }

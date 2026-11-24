@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import com.mp3tify.playback.SleepTimerManager
 import com.mp3tify.playback.WakeLockManager
 import com.mp3tify.ui.t
+import com.mp3tify.ui.tf
 
 private tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
@@ -44,7 +45,7 @@ fun SleepTimerDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Temporizador de sueño") },
+        title = { Text(t("sleep_timer_title")) },
         text = {
             Column {
                 if (!adminActive && activity != null) {
@@ -52,7 +53,7 @@ fun SleepTimerDialog(
                         onClick = { WakeLockManager.requestDeviceAdmin(activity) },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Activar apagado real de pantalla")
+                        Text(t("sleep_timer_enable_admin"))
                     }
                     Spacer(Modifier.height(8.dp))
                 }
@@ -65,7 +66,7 @@ fun SleepTimerDialog(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            if (activeMinutes == minutes) "$minutes minutos (activo)" else "$minutes minutos",
+                            if (activeMinutes == minutes) tf("sleep_timer_minutes_active", minutes) else tf("sleep_timer_minutes", minutes),
                             color = if (activeMinutes == minutes) MaterialTheme.colorScheme.primary
                             else MaterialTheme.colorScheme.onSurface
                         )
@@ -79,7 +80,7 @@ fun SleepTimerDialog(
                             onDismiss()
                         },
                         modifier = Modifier.fillMaxWidth()
-                    ) { Text("Cancelar temporizador") }
+                    ) { Text(t("sleep_timer_cancel")) }
                 }
             }
         },
