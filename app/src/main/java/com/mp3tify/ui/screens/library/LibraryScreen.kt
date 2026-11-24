@@ -586,9 +586,9 @@ fun LibraryScreen(
                         }
                     }
                 }
+                }
                 AutoHideCountToolbar(scrollState = scrollState, count = songs.size, isGrid = viewMode == ViewMode.GRID, onToggleView = { val next = if (viewMode == ViewMode.LIST) ViewMode.GRID else ViewMode.LIST; scope.launch { Preferences.setLibraryViewMode(next.name) } }, sleepTimerActive = sleepTimerMinutes > 0, onOpenSleepTimer = { showSleepTimerDialog = true })
                 }
-            }
                 } // closes Column added for fixed SelectionBanner
         }
 
