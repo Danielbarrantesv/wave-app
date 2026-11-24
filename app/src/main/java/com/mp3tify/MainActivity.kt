@@ -4,13 +4,21 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import android.content.res.Configuration
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -36,6 +44,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
@@ -163,7 +172,11 @@ class MainActivity : ComponentActivity() {
 
             Mp3tifyTheme(forceDark = darkTheme, accent = AccentColor.fromKey(accentKey)) {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    ProvideAppLanguage { AppNav() }
+                    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+                    val sideInsets = if (isLandscape) WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal).union(WindowInsets(left = 12.dp, right = 12.dp)) else WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
+                    ProvideAppLanguage {
+                        Box(Modifier.fillMaxSize().windowInsetsPadding(sideInsets)) { AppNav() }
+                    }
                 }
                 // CRITICAL FIX: diálogo de selección de idioma en la primera instalación.
                 if (showLanguageDialog) {

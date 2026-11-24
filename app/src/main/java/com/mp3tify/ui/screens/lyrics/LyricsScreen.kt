@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -58,7 +60,7 @@ import java.io.File
  *   - Background: portada del album actual como fondo (AsyncImage de Coil),
  *     con scrim oscuro (Color.Black alpha 0.75) encima para que la letra
  *     sea legible.
- *   - Top bar: padding top con WindowInsets.statusBars para que la flecha
+ *   - Top bar: padding top con WindowInsets.safeDrawing.only(WindowInsetsSides.Top) para que la flecha
  *     de back y el título "Letra" no se corten con la status bar.
  *   - Texto de la letra: blanco para línea activa, gris claro para inactivas,
  *     para contraste con el fondo oscuro.
@@ -180,13 +182,13 @@ fun LyricsScreen(onBack: () -> Unit) {
         // Layer 3: contenido (top bar + lyrics) encima del scrim.
         Column(Modifier.fillMaxSize()) {
             // Top bar: back + title only.
-            // CRITICAL (v2.5.23 UI): padding top con WindowInsets.statusBars para
+            // CRITICAL (v2.5.23 UI): padding top con WindowInsets.safeDrawing.only(WindowInsetsSides.Top) para
             // que la flecha de back y el título "Letra" no se corten con la
             // status bar (batería/hora/wifi) del sistema.
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .windowInsetsPadding(WindowInsets.statusBars)
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
                     .padding(horizontal = 4.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {

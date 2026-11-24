@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyRow
@@ -80,7 +82,7 @@ fun EqualizerScreen(onBack: () -> Unit) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            // CRITICAL #1: windowInsetsPadding(WindowInsets.statusBars) para que el
+            // CRITICAL #1: windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top)) para que el
             // Row del topBar NO se superponga con la status bar (bateria/hora/wifi).
             // Antes este Row custom no aplicaba insets y los iconos quedaban pegados
             // arriba, mezclados con la status bar. Tambien navigationBars en bottom
@@ -88,7 +90,7 @@ fun EqualizerScreen(onBack: () -> Unit) {
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .windowInsetsPadding(WindowInsets.statusBars)
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
                     .padding(horizontal = 4.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
