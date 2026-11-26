@@ -82,9 +82,9 @@ fun CollageCover(
 @Composable
 private fun CollageTile(song: Song?, modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    var bitmap by remember(song?.id) { mutableStateOf<Bitmap?>(null) }
-
+    var bitmap by remember(song?.id) { val p = song?.let { it.artUri?.takeIf { a -> a.isNotBlank() } ?: it.filePath }; mutableStateOf(if (!p.isNullOrBlank()) AlbumArtCache.peek(p, 256) else null) }
     LaunchedEffect(song?.id) {
+        if (bitmap != null) return@LaunchedEffect
         val s = song ?: return@LaunchedEffect
         val path = s.artUri?.takeIf { it.isNotBlank() } ?: s.filePath
         val fallback = if (path != s.filePath) s.filePath else null
@@ -98,7 +98,7 @@ private fun CollageTile(song: Song?, modifier: Modifier = Modifier) {
     val bmp = bitmap
     if (bmp != null) {
         Image(
-            bitmap = bmp.asImageBitmap(),
+            bitmap = remember(bmp) { bmp.asImageBitmap() },
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = modifier.fillMaxSize()

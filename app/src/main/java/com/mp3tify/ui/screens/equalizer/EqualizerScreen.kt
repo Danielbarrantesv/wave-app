@@ -50,7 +50,7 @@ import kotlinx.coroutines.withContext
 @Composable
 fun EqualizerScreen(onBack: () -> Unit) {
     var initialized by remember { mutableStateOf(false) }
-    var enabled by remember { mutableStateOf(true) }
+    var enabled by remember { mutableStateOf(EqualizerManager.isEnabled()) }
     var bandCount by remember { mutableStateOf(5) }
     var levels by remember { mutableStateOf(listOf(0.5f, 0.5f, 0.5f, 0.5f, 0.5f)) }
     var selectedPreset by remember { mutableStateOf(-1) }
@@ -66,7 +66,7 @@ fun EqualizerScreen(onBack: () -> Unit) {
         withContext(Dispatchers.IO) {
             val ok = EqualizerManager.init()
             if (ok) {
-                EqualizerManager.setEnabled(true)
+                enabled = EqualizerManager.isEnabled()
                 val count = EqualizerManager.getBandCount()
                 val lvls = (0 until count).map { i ->
                     val lvl = EqualizerManager.getBandLevel(i.toShort())
@@ -156,7 +156,7 @@ fun EqualizerScreen(onBack: () -> Unit) {
                             selected = selectedPreset == i,
                             onClick = {
                                 selectedPreset = i
-                                EqualizerManager.applyPreset(preset)
+                                EqualizerManager.applyPreset(preset); enabled = EqualizerManager.isEnabled()
                                 levels = preset.gains
                                     .take(bandCount)
                                     .map { ((it - minLevel).toFloat() / range).coerceIn(0f, 1f) }
@@ -188,10 +188,7 @@ fun EqualizerScreen(onBack: () -> Unit) {
                                             if (band < it.size) it[band] = v
                                         }
                                         selectedPreset = -1
-                                        EqualizerManager.setBandGain(
-                                            band.toShort(),
-                                            (minLevel + v * range).toInt()
-                                        )
+                                        EqualizerManager.setBandGain(band.toShort(), (minLevel + v * range).toInt()); enabled = EqualizerManager.isEnabled()
                                     },
                                     modifier = Modifier
                                         .graphicsLayer {

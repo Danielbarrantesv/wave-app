@@ -65,7 +65,7 @@ fun DriveModeScreen(onBack: () -> Unit) {
     // Position updates every second while on this screen.
     LaunchedEffect(Unit) {
         while (true) {
-            tickPosition = PlaybackController.state.value.positionMs
+            tickPosition = PlaybackController.positionMs.value
             delay(1000)
         }
     }

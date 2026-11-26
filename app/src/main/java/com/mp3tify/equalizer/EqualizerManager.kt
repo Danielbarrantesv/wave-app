@@ -16,7 +16,9 @@ object EqualizerManager {
     // CRITICAL (Bug EQ no funciona): persistir el estado del usuario para re-aplicarlo
     // cuando el EQ se re-attacha a una nueva sesión (ExoPlayer puede cambiar sessionId
     // tras el primer playback).
-    private var userEnabled: Boolean = true
+    private var userEnabled: Boolean = false
+    private fun hasActiveBands() = userBandGains.any { it != 0 }
+    fun isEnabled() = userEnabled
     private var userBandGains: IntArray = IntArray(5) // 0 = sin cambio
 
     data class EqPreset(val key: String, val gains: IntArray)
@@ -76,6 +78,7 @@ object EqualizerManager {
                 try { currentEq.release() } catch (_: Exception) {}
                 equalizer = null
             }
+            if (!userEnabled || !hasActiveBands()) return
             attachInternal(newSessionId)
         } catch (e: Exception) {
             Log.e(TAG, "reattachToSession failed", e)
@@ -90,7 +93,7 @@ object EqualizerManager {
         equalizer = eq
         Log.i(TAG, "attachInternal: created Equalizer on session $sessionId, enabled=$userEnabled, bands=${eq.numberOfBands}, range=[${eq.bandLevelRange[0]},${eq.bandLevelRange[1]}]")
         // Re-aplicar el estado del usuario
-        try { eq.enabled = userEnabled } catch (e: Exception) { Log.w(TAG, "setEnabled failed", e) }
+        try { eq.enabled = userEnabled && hasActiveBands() } catch (e: Exception) { Log.w(TAG, "setEnabled failed", e) }
         val bands = eq.numberOfBands.toInt()
         val range = eq.bandLevelRange
         for (i in 0 until bands) {
@@ -108,7 +111,7 @@ object EqualizerManager {
         Log.i(TAG, "setEnabled: $enabled (was $userEnabled)")
         userEnabled = enabled
         try {
-            equalizer?.enabled = enabled
+            equalizer?.enabled = enabled && hasActiveBands()
         } catch (e: Exception) {
             Log.e(TAG, "setEnabled failed", e)
         }
@@ -129,6 +132,7 @@ object EqualizerManager {
                 eq.setBandLevel(i.toShort(), clamped.toShort())
                 if (i < userBandGains.size) userBandGains[i] = gain
             }
+            val a = hasActiveBands(); userEnabled = a; eq.enabled = a
             true
         } catch (e: Exception) {
             Log.e(TAG, "applyPreset failed", e)
@@ -141,7 +145,7 @@ object EqualizerManager {
         Log.i(TAG, "setBandGain: band=$idx gain=$gain")
         if (idx in 0 until userBandGains.size) userBandGains[idx] = gain
         try {
-            equalizer?.setBandLevel(band, gain.toShort())
+            val a = hasActiveBands(); userEnabled = a; equalizer?.let { it.setBandLevel(band, gain.toShort()); it.enabled = a }
         } catch (e: Exception) {
             Log.e(TAG, "setBandGain failed", e)
         }

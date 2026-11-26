@@ -75,7 +75,7 @@ fun QueueScreen(onBack: () -> Unit) {
             }
         } else {
             ScrollbarLazyColumn(modifier = Modifier.fillMaxSize()) {
-                itemsIndexed(state.playlist) { index, song ->
+                itemsIndexed(state.playlist, key = { index, song -> "${index}_${song.id}" }) { index, song ->
                     val isCurrent = index == state.currentWindow
                     Row(
                         modifier = Modifier

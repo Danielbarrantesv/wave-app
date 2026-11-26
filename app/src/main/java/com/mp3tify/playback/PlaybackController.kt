@@ -157,7 +157,7 @@ object PlaybackController {
             p.addListener(object : Player.Listener {
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
                     refreshState()
-                    if (isPlaying) { ensureServiceRunning(true); startPolling() } else stopPolling()
+                    if (isPlaying) { ensureServiceRunning(false); startPolling() } else stopPolling()
                 }
                 override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                     refreshState()
@@ -329,10 +329,9 @@ object PlaybackController {
     private fun pollPosition() {
         val p = player ?: return
         try {
-            val pos = p.currentPosition.coerceAtLeast(0L); _positionMs.value = pos
+            val pos = p.currentPosition.coerceAtLeast(0L); if (_positionMs.value != pos) _positionMs.value = pos
             val st = _state.value; val curWin = if (p.mediaItemCount == 0) -1 else p.currentMediaItemIndex; val curDur = p.duration.coerceAtLeast(0L)
             if (p.isPlaying != st.isPlaying || curWin != st.currentWindow || curDur != st.durationMs) refreshState()
-            else if (st.positionMs != pos) _state.value = st.copy(positionMs = pos)
         } catch (e: Exception) { e.printStackTrace(); stopPolling() }
     }
     private fun stopPolling() {
@@ -501,7 +500,7 @@ object PlaybackController {
                     p.setMediaItems(items, safeIndex, 0L)
                     p.prepare()
                     p.play()
-                    ensureServiceRunning(true)
+                    ensureServiceRunning(false)
                     refreshState()
                 }
             } catch (e: Exception) {
@@ -724,7 +723,7 @@ object PlaybackController {
                 }
             }
             p.play()
-            ensureServiceRunning(true)
+            ensureServiceRunning(false)
             refreshState()
             // CRITICAL FIX: si despues de play() el player sigue sin reproducir y esta
             // en STATE_IDLE con media items, esta zombie. Liberar, reconectar, restaurar
@@ -833,7 +832,7 @@ object PlaybackController {
     fun seekTo(positionMs: Long) {
         try {
             val p = ensureConnected() ?: return
-            p.seekTo(positionMs.coerceAtLeast(0L))
+            val safe = positionMs.coerceAtLeast(0L); p.seekTo(safe); _positionMs.value = safe
             refreshState()
         } catch (e: Exception) {
             e.printStackTrace()

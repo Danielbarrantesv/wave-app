@@ -68,7 +68,7 @@ class MediaPlaybackService : MediaSessionService() {
                 buildOrReplaceSession(cur)
             } else mediaSession
             if (s != null && s.player.mediaItemCount > 0 &&
-                (s.player.playWhenReady || intent?.action == ACTION_REFRESH_NOTIFICATION)
+                intent?.action == ACTION_REFRESH_NOTIFICATION
             ) {
                 onUpdateNotification(s, s.player.playWhenReady)
             }

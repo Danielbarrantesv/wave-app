@@ -55,7 +55,6 @@ fun SongRow(
     isPlaying: Boolean = false,
     onOpenMenu: (() -> Unit)? = null
 ) {
-    var menuOpen by remember { mutableStateOf(false) }
 
     Row(
         modifier = Modifier
@@ -104,48 +103,16 @@ fun SongRow(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Box {
-            IconButton(onClick = { if (onOpenMenu != null) onOpenMenu() else menuOpen = true }) {
-                Icon(Icons.Filled.MoreVert, contentDescription = t("more_options"))
-            }
-            if (onOpenMenu == null) DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                DropdownMenuItem(
-                    text = { Text(if (song.isFavorite) t("remove_from_favorites") else t("add_to_favorites")) },
-                    onClick = {
-                        menuOpen = false
-                        onToggleFavorite()
-                    },
-                    leadingIcon = {
-                        Icon(
-                            if (song.isFavorite) Icons.Filled.FavoriteBorder else Icons.Filled.Favorite,
-                            contentDescription = null
-                        )
-                    }
-                )
-                DropdownMenuItem(
-                    text = { Text(t("add_to_list")) },
-                    onClick = {
-                        menuOpen = false
-                        onAddToPlaylist()
-                    },
-                    leadingIcon = { Icon(Icons.Filled.PlaylistAdd, contentDescription = null) }
-                )
-                DropdownMenuItem(
-                    text = { Text(t("edit_info")) },
-                    onClick = {
-                        menuOpen = false
-                        onEditInfo()
-                    },
-                    leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) }
-                )
-                DropdownMenuItem(
-                    text = { Text(t("delete_song")) },
-                    onClick = {
-                        menuOpen = false
-                        onDelete()
-                    },
-                    leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null) }
-                )
+        if (onOpenMenu != null) { IconButton(onClick = onOpenMenu) { Icon(Icons.Filled.MoreVert, contentDescription = t("more_options")) } } else {
+            var menuOpen by remember { mutableStateOf(false) }
+            Box {
+                IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreVert, contentDescription = t("more_options")) }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    DropdownMenuItem(text = { Text(if (song.isFavorite) t("remove_from_favorites") else t("add_to_favorites")) }, onClick = { menuOpen = false; onToggleFavorite() }, leadingIcon = { Icon(if (song.isFavorite) Icons.Filled.FavoriteBorder else Icons.Filled.Favorite, contentDescription = null) })
+                    DropdownMenuItem(text = { Text(t("add_to_list")) }, onClick = { menuOpen = false; onAddToPlaylist() }, leadingIcon = { Icon(Icons.Filled.PlaylistAdd, contentDescription = null) })
+                    DropdownMenuItem(text = { Text(t("edit_info")) }, onClick = { menuOpen = false; onEditInfo() }, leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) })
+                    DropdownMenuItem(text = { Text(t("delete_song")) }, onClick = { menuOpen = false; onDelete() }, leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null) })
+                }
             }
         }
     }

@@ -10,7 +10,7 @@ import kotlinx.coroutines.asCoroutineDispatcher
 import java.util.concurrent.Executors
 
 object AlbumArtCache {
-    private const val MAX_CACHE_BYTES = 8 * 1024 * 1024
+    private const val MAX_CACHE_BYTES = 24 * 1024 * 1024
     val dispatcher = Executors.newFixedThreadPool(2).asCoroutineDispatcher()
     private val cache = object : LruCache<String, Bitmap>(MAX_CACHE_BYTES) {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount

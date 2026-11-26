@@ -134,8 +134,8 @@ fun LyricsScreen(onBack: () -> Unit) {
     }
 
     val lyrics = parsed
-    val positionMs = state.positionMs
-    val activeIndex = if (lyrics != null) LrcParser.activeLineIndex(lyrics, positionMs) else -1
+    val posState = PlaybackController.positionMs.collectAsState()
+    val activeIndex by remember(lyrics) { androidx.compose.runtime.derivedStateOf { if (lyrics != null) LrcParser.activeLineIndex(lyrics, posState.value) else -1 } }
 
     // Auto-scroll so the active line stays visible (activeIndex - 3).
     LaunchedEffect(activeIndex) {

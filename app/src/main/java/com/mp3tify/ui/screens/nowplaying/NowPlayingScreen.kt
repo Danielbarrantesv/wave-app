@@ -114,11 +114,10 @@ fun NowPlayingScreen(
 
     // CRITICAL FIX (Bug corazón): look up the current song in the DB-observed
     // library list so isFavorite updates reactively after toggleFavorite().
-    val currentFromDb = if (current != null) librarySongs.firstOrNull { it.id == current.id } else null
+    val currentFromDb = remember(current?.id, librarySongs) { if (current != null) librarySongs.firstOrNull { it.id == current.id } else null }
     val effectiveCurrent = currentFromDb ?: current
 
-    var localSeek by remember { mutableStateOf<Long?>(null) }
-
+    
     // Background album cover bitmap (higher-res 512 for the full-screen bg).
     var bgBitmap by remember(current?.id) { mutableStateOf<android.graphics.Bitmap?>(null) }
     androidx.compose.runtime.LaunchedEffect(current?.id) {
@@ -176,7 +175,7 @@ fun NowPlayingScreen(
         val bmp = bgBitmap
         if (bmp != null) {
             Image(
-                bitmap = bmp.asImageBitmap(),
+                bitmap = remember(bmp) { bmp.asImageBitmap() },
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
@@ -335,39 +334,7 @@ fun NowPlayingScreen(
                 Spacer(Modifier.height(16.dp))
 
                 // Progress slider + times
-                val displayPosition = localSeek ?: state.positionMs
-                Slider(
-                    value = if (state.durationMs > 0) {
-                        (displayPosition.toFloat() / state.durationMs).coerceIn(0f, 1f)
-                    } else {
-                        0f
-                    },
-                    onValueChange = { v -> localSeek = (v * state.durationMs).toLong() },
-                    onValueChangeFinished = {
-                        localSeek?.let { PlaybackController.seekTo(it) }
-                        localSeek = null
-                    },
-                    colors = SliderDefaults.colors(
-                        thumbColor = Color.White,
-                        activeTrackColor = Color.White,
-                        inactiveTrackColor = Color.White.copy(alpha = 0.3f)
-                    )
-                )
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        formatDuration(displayPosition),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.85f)
-                    )
-                    Text(
-                        formatDuration(state.durationMs),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.85f)
-                    )
-                }
+                NowPlayingSeekSection(state.durationMs)
 
                 Spacer(Modifier.height(16.dp))
 
@@ -503,4 +470,11 @@ fun NowPlayingScreen(
             }
         }
     }
+}
+@Composable private fun NowPlayingSeekSection(durationMs: Long) {
+    val pos by PlaybackController.positionMs.collectAsState()
+    var localSeek by remember { mutableStateOf<Long?>(null) }
+    val dp = localSeek ?: pos
+    Slider(value = if (durationMs > 0) (dp.toFloat() / durationMs).coerceIn(0f, 1f) else 0f, onValueChange = { localSeek = (it * durationMs).toLong() }, onValueChangeFinished = { localSeek?.let { PlaybackController.seekTo(it) }; localSeek = null }, colors = SliderDefaults.colors(thumbColor = Color.White, activeTrackColor = Color.White, inactiveTrackColor = Color.White.copy(alpha = 0.3f)))
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(formatDuration(dp), style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.85f)); Text(formatDuration(durationMs), style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.85f)) }
 }

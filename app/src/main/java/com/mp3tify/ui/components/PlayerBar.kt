@@ -37,6 +37,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -60,8 +61,7 @@ import com.mp3tify.ui.t
 @Composable
 fun LivePlayerBar(onOpenNowPlaying: () -> Unit) {
     val meta by PlaybackController.barMeta.collectAsState()
-    val compatState = remember(meta) { PlaybackState(isPlaying = meta.isPlaying, currentWindow = if (meta.currentSong != null) 0 else -1, durationMs = meta.durationMs, playlist = listOfNotNull(meta.currentSong)) }
-    PlayerBar(state = compatState, onOpenNowPlaying = onOpenNowPlaying, livePosition = true)
+    PlayerBarContent(meta.currentSong, meta.isPlaying, meta.durationMs, 0L, onOpenNowPlaying, true)
 }
 @Composable
 private fun LiveSeekSlider(durationMs: Long, modifier: Modifier = Modifier) {
@@ -69,7 +69,7 @@ private fun LiveSeekSlider(durationMs: Long, modifier: Modifier = Modifier) {
     val pc = MaterialTheme.colorScheme.primary; val oc = MaterialTheme.colorScheme.outline; val d = LocalDensity.current
     val tr = remember(d) { with(d) { 8.dp.toPx() } }; val th = remember(d) { with(d) { 3.dp.toPx() } }
     var drag by remember { mutableStateOf(false) }; var dv by remember { mutableStateOf(0f) }
-    Canvas(modifier = modifier.height(16.dp).pointerInput(durationMs) {
+    Canvas(modifier = modifier.height(16.dp).graphicsLayer().pointerInput(durationMs) {
         detectHorizontalDragGestures(
             onDragStart = { o -> if (durationMs > 0) { drag = true; dv = (o.x / size.width).coerceIn(0f, 1f) } },
             onHorizontalDrag = { ch, da -> if (drag) { ch.consume(); dv = (dv + da / size.width).coerceIn(0f, 1f) } },
@@ -86,12 +86,10 @@ private fun LiveSeekSlider(durationMs: Long, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun PlayerBar(
-    state: PlaybackState,
-    onOpenNowPlaying: () -> Unit,
-    livePosition: Boolean = false
-) {
-    val current = state.playlist.getOrNull(state.currentWindow)
+fun PlayerBar(state: PlaybackState, onOpenNowPlaying: () -> Unit, livePosition: Boolean = false) {
+    PlayerBarContent(state.playlist.getOrNull(state.currentWindow), state.isPlaying, state.durationMs, state.positionMs, onOpenNowPlaying, livePosition)
+}
+@Composable private fun PlayerBarContent(current: com.mp3tify.data.model.Song?, isPlaying: Boolean, durationMs: Long, positionMs: Long, onOpenNowPlaying: () -> Unit, livePosition: Boolean) {
 
     // seekPosition local. null = no está arrastrando, usa el progreso real del
     // PlaybackState. != null = está arrastrando, usa el valor local para evitar
@@ -103,14 +101,14 @@ fun PlayerBar(
         // pill, los botones prev/play/next quedan tapados por la nav bar del sistema.
         Surface(
             color = MaterialTheme.colorScheme.surfaceVariant,
-            modifier = Modifier.navigationBarsPadding()
+            modifier = Modifier.navigationBarsPadding().graphicsLayer()
         ) {
             Column {
                 if (livePosition) {
-                    LiveSeekSlider(durationMs = state.durationMs, modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 0.dp))
+                    LiveSeekSlider(durationMs = durationMs, modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 0.dp))
                 } else {
-                    val progress = if (state.durationMs > 0) (state.positionMs.toFloat() / state.durationMs).coerceIn(0f, 1f) else 0f
-                    SeekSlider(progress = seekPosition ?: progress, durationMs = state.durationMs, onSeekStart = {}, onSeekChange = { if (state.durationMs > 0) seekPosition = it }, onSeekEnd = { seekPosition?.let { try { PlaybackController.seekTo((it * state.durationMs).toLong()) } catch (e: Exception) { e.printStackTrace() } }; seekPosition = null }, modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 0.dp))
+                    val progress = if (durationMs > 0) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
+                    SeekSlider(progress = seekPosition ?: progress, durationMs = durationMs, onSeekStart = {}, onSeekChange = { if (durationMs > 0) seekPosition = it }, onSeekEnd = { seekPosition?.let { try { PlaybackController.seekTo((it * durationMs).toLong()) } catch (e: Exception) { e.printStackTrace() } }; seekPosition = null }, modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 0.dp))
                 }
                 Row(
                     modifier = Modifier
@@ -141,10 +139,10 @@ fun PlayerBar(
                         Icon(Icons.Filled.SkipPrevious, contentDescription = t("previous"))
                     }
                     IconButton(onClick = {
-                        if (state.isPlaying) PlaybackController.pause() else PlaybackController.play()
+                        if (isPlaying) PlaybackController.pause() else PlaybackController.play()
                     }) {
                         Icon(
-                            if (state.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                            if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                             contentDescription = t("pause"),
                             tint = MaterialTheme.colorScheme.primary
                         )
