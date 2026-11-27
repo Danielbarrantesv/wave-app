@@ -5,7 +5,12 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -16,6 +21,8 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Icon
@@ -27,7 +34,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -67,6 +78,26 @@ fun AutoHideCountToolbar(scrollState: LazyListState, count: Int, isGrid: Boolean
                 Text(tf("songs_count", count), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
                 IconButton(onClick = onToggleView) { Icon(if (isGrid) Icons.Filled.List else Icons.Filled.Apps, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
                 IconButton(onClick = onOpenSleepTimer) { Icon(Icons.Filled.Schedule, contentDescription = null, tint = if (sleepTimerActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
+        }
+    }
+}
+@Composable
+fun ScrollJumpButtons(scrollState: LazyListState, modifier: Modifier = Modifier) {
+    val scope = rememberCoroutineScope()
+    val showUp by remember(scrollState) { derivedStateOf { scrollState.canScrollBackward } }
+    val showDown by remember(scrollState) { derivedStateOf { scrollState.canScrollForward } }
+    AnimatedVisibility(visible = showUp || showDown, enter = fadeIn(), exit = fadeOut(), modifier = modifier) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (showUp) {
+                Surface(onClick = { scope.launch { if (scrollState.firstVisibleItemIndex > 15) scrollState.scrollToItem(15); scrollState.animateScrollToItem(0) } }, shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f), shadowElevation = 4.dp, modifier = Modifier.size(40.dp)) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Icon(Icons.Filled.KeyboardArrowUp, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
+                }
+            }
+            if (showDown) {
+                Surface(onClick = { scope.launch { val last = (scrollState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0); if (last - scrollState.firstVisibleItemIndex > 15) scrollState.scrollToItem((last - 15).coerceAtLeast(0)); scrollState.animateScrollToItem(last) } }, shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f), shadowElevation = 4.dp, modifier = Modifier.size(40.dp)) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
+                }
             }
         }
     }

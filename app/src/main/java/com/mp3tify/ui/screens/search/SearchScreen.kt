@@ -2,6 +2,7 @@ package com.mp3tify.ui.screens.search
 import com.mp3tify.data.model.displayArtist
 import com.mp3tify.data.model.displayTitle
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Search
@@ -33,7 +35,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -41,6 +47,7 @@ import com.mp3tify.data.model.Song
 import com.mp3tify.data.repository.Repository
 import com.mp3tify.playback.PlaybackController
 import com.mp3tify.ui.components.LivePlayerBar
+import com.mp3tify.ui.components.ScrollJumpButtons
 import com.mp3tify.ui.components.ScrollbarLazyColumn
 import com.mp3tify.ui.components.SongRow
 import com.mp3tify.ui.t
@@ -59,6 +66,10 @@ fun SearchScreen(
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<Song>>(emptyList()) }
     var searched by remember { mutableStateOf(false) }
+    val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val listState = rememberLazyListState()
+    LaunchedEffect(Unit) { delay(120); focusRequester.requestFocus(); keyboardController?.show() }
 
 
     // CRITICAL FIX: 250ms debounce — typing does not hammer the database.
@@ -93,7 +104,7 @@ fun SearchScreen(
                         placeholder = { Text(t("search_placeholder")) },
                         leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().focusRequester(focusRequester)
                     )
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -128,8 +139,10 @@ fun SearchScreen(
                 }
             } else {
                 // Results in a fast-scrolling list. onClick MUST PLAY the song.
+                Box(Modifier.fillMaxSize()) {
                 ScrollbarLazyColumn(
                     modifier = Modifier.fillMaxSize(),
+                    state = listState,
                     contentPadding = PaddingValues(bottom = 16.dp)
                 ) {
                     items(results, key = { it.id }) { song ->
@@ -159,6 +172,8 @@ fun SearchScreen(
                             onDelete = { }
                         )
                     }
+                }
+                ScrollJumpButtons(scrollState = listState, modifier = Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 12.dp))
                 }
             }
         }

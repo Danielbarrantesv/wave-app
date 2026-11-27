@@ -92,6 +92,7 @@ import com.mp3tify.ui.components.LivePlayerBar
 import com.mp3tify.ui.components.ScrollbarLazyColumn
 import com.mp3tify.ui.components.SleepTimerDialog
 import com.mp3tify.ui.components.AutoHideCountToolbar
+import com.mp3tify.ui.components.ScrollJumpButtons
 import com.mp3tify.ui.I18n
 import com.mp3tify.ui.components.SongFileActionsHost
 import com.mp3tify.ui.components.SongRow
@@ -465,6 +466,7 @@ fun PlaylistScreen(
                 }
                 }
                 AutoHideCountToolbar(scrollState = scrollState, count = songs.size, isGrid = isGridView, onToggleView = { scope.launch { Preferences.setPlaylistViewMode(if (!isGridView) "GRID" else "LIST") } }, sleepTimerActive = sleepTimerMinutes > 0, onOpenSleepTimer = { showSleepTimerDialog = true })
+                ScrollJumpButtons(scrollState = scrollState, modifier = Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 12.dp))
                 }
             }
         }

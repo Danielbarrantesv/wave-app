@@ -5,6 +5,7 @@ import android.content.res.Configuration
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -93,6 +94,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -111,7 +113,9 @@ import com.mp3tify.ui.components.CollageCover
 import com.mp3tify.ui.components.LivePlayerBar
 import com.mp3tify.ui.components.ScrollbarLazyColumn
 import com.mp3tify.ui.components.SleepTimerDialog
+import com.mp3tify.R
 import com.mp3tify.ui.components.AutoHideCountToolbar
+import com.mp3tify.ui.components.ScrollJumpButtons
 import com.mp3tify.ui.I18n
 import com.mp3tify.ui.components.SongFileActionsHost
 import com.mp3tify.ui.components.SongRow
@@ -251,7 +255,7 @@ fun LibraryScreen(
                 // CRITICAL #1: windowInsets explicitos para garantizar que el TopAppBar
                 // NO se superponga con la status bar (bateria/hora/wifi) en ningun modelo.
                 TopAppBar(
-                    title = { Text(t("app_name"), style = MaterialTheme.typography.titleLarge) },
+                    title = { Row(verticalAlignment = Alignment.CenterVertically) { Image(painter = painterResource(id = R.drawable.ic_wave_logo), contentDescription = null, modifier = Modifier.size(width = 36.dp, height = 21.dp)); Spacer(Modifier.width(8.dp)); Text(t("app_name"), style = MaterialTheme.typography.titleLarge) } },
                     actions = {
                         IconButton(onClick = onOpenSearch) {
                             Icon(Icons.Filled.Search, contentDescription = t("search_placeholder"))
@@ -590,6 +594,7 @@ fun LibraryScreen(
                 }
                 }
                 AutoHideCountToolbar(scrollState = scrollState, count = songs.size, isGrid = viewMode == ViewMode.GRID, onToggleView = { val next = if (viewMode == ViewMode.LIST) ViewMode.GRID else ViewMode.LIST; scope.launch { Preferences.setLibraryViewMode(next.name) } }, sleepTimerActive = sleepTimerMinutes > 0, onOpenSleepTimer = { showSleepTimerDialog = true })
+                ScrollJumpButtons(scrollState = scrollState, modifier = Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 12.dp))
                 }
                 } // closes Column added for fixed SelectionBanner
         }
