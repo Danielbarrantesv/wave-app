@@ -12,8 +12,8 @@ android {
         applicationId = "com.mp3tify"
         minSdk = 24
         targetSdk = 36
-        versionCode = 45
-        versionName = "2.5.49"
+        versionCode = 46
+        versionName = "2.5.50"
     }
 
     buildTypes {
