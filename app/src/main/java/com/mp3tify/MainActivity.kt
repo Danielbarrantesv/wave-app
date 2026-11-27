@@ -7,7 +7,6 @@ import android.app.RemoteAction
 import android.content.BroadcastReceiver
 import android.content.Intent
 import android.content.IntentFilter
-import android.graphics.drawable.Icon
 import android.util.Rational
 import android.content.Context
 import android.content.pm.PackageManager
@@ -17,7 +16,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.core.content.ContextCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.compose.foundation.background
@@ -280,7 +278,7 @@ class MainActivity : ComponentActivity() {
 
 
     @androidx.annotation.RequiresApi(Build.VERSION_CODES.O)
-    private fun pipAction(action: String, reqCode: Int, iconRes: Int, title: String) = RemoteAction(Icon.createWithResource(this, iconRes), title, title, PendingIntent.getBroadcast(this, reqCode, Intent(action).setPackage(packageName), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
+    private fun pipAction(action: String, reqCode: Int, iconRes: Int, title: String) = RemoteAction(android.graphics.drawable.Icon.createWithResource(this, iconRes), title, title, PendingIntent.getBroadcast(this, reqCode, Intent(action).setPackage(packageName), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
     @androidx.annotation.RequiresApi(Build.VERSION_CODES.O)
     private fun buildPipParams(isPlaying: Boolean, hasSong: Boolean): PictureInPictureParams {
         val b = PictureInPictureParams.Builder().setAspectRatio(Rational(16, 9)).setActions(listOf(pipAction(ACTION_PIP_PREV, 101, R.drawable.ic_pip_prev, "Previous"), pipAction(ACTION_PIP_PLAY_PAUSE, 102, if (isPlaying) R.drawable.ic_pip_pause else R.drawable.ic_pip_play, if (isPlaying) "Pause" else "Play"), pipAction(ACTION_PIP_NEXT, 103, R.drawable.ic_pip_next, "Next")))
