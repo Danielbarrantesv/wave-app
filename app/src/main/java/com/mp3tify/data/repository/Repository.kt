@@ -111,6 +111,9 @@ class Repository private constructor(private val context: Context) {
     suspend fun allSongs(): List<Song> =
         try { songDao.listAll() } catch (e: Exception) { emptyList() }
 
+    suspend fun songById(id: Long): Song? =
+        try { songDao.getById(id) } catch (e: Exception) { null }
+
     suspend fun allPlaylists(): List<Playlist> =
         try { playlistDao.getAll() } catch (e: Exception) { emptyList() }
 

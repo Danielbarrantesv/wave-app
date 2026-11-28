@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DriveEta
 import androidx.compose.material.icons.filled.Favorite
@@ -120,6 +121,8 @@ import com.mp3tify.ui.I18n
 import com.mp3tify.ui.components.SongFileActionsHost
 import com.mp3tify.ui.components.SongRow
 import com.mp3tify.ui.t
+import com.mp3tify.ui.components.PcLinkDialog
+import com.mp3tify.remote.PhoneShareServer
 import com.mp3tify.ui.tf
 import com.mp3tify.ui.viewmodel.LibraryViewModel
 import com.mp3tify.util.Preferences
@@ -180,6 +183,8 @@ fun LibraryScreen(
         runCatching { ViewMode.valueOf(libraryViewMode) }.getOrNull() ?: ViewMode.LIST
     }
     var showSleepTimerDialog by remember { mutableStateOf(false) }
+    var showPcLinkDialog by remember { mutableStateOf(false) }
+    val pcShareState by PhoneShareServer.state.collectAsState()
     val sleepTimerMinutes by SleepTimerManager.activeMinutes.collectAsState()
     var songForAddToPlaylist by remember { mutableStateOf<Song?>(null) }
     var songToEdit by remember { mutableStateOf<Song?>(null) }
@@ -265,6 +270,13 @@ fun LibraryScreen(
                         }
                         IconButton(onClick = onOpenDriveMode) {
                             Icon(Icons.Filled.DriveEta, contentDescription = t("drive_mode"))
+                        }
+                        IconButton(onClick = { showPcLinkDialog = true }) {
+                            Icon(
+                                Icons.Filled.Computer,
+                                contentDescription = t("pc_connect_title"),
+                                tint = if (pcShareState.active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground
+                            )
                         }
                         IconButton(onClick = onOpenSettings) {
                             Icon(Icons.Filled.Settings, contentDescription = t("settings"))
@@ -805,6 +817,10 @@ fun LibraryScreen(
             activeMinutes = sleepTimerMinutes,
             onDismiss = { showSleepTimerDialog = false }
         )
+    }
+
+    if (showPcLinkDialog) {
+        PcLinkDialog(onDismiss = { showPcLinkDialog = false })
     }
 
     songToEdit?.let { song ->

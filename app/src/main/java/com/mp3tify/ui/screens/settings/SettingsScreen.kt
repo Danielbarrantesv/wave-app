@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.BrightnessHigh
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DriveEta
 import androidx.compose.material.icons.filled.Equalizer
@@ -75,6 +76,7 @@ import com.mp3tify.BuildConfig
 import com.mp3tify.cloud.CloudBackupManager
 import com.mp3tify.data.repository.Repository
 import com.mp3tify.ui.components.ToggleRow
+import com.mp3tify.ui.components.PcLinkDialog
 import com.mp3tify.ui.t
 import com.mp3tify.ui.tf
 import com.mp3tify.ui.theme.AccentColor
@@ -110,6 +112,7 @@ fun SettingsScreen(
     var showWipeDialog by remember { mutableStateOf(false) }
     // #4 Log de errores: dialog que muestra el path del archivo generado
     var showLogDialog by remember { mutableStateOf(false) }
+    var showPcLinkDialog by remember { mutableStateOf(false) }
     var logFilePath by remember { mutableStateOf<String?>(null) }
     // CRITICAL (v2.5.15 diagnóstico): state para guardar logs en una carpeta
     // seleccionable por el usuario (SAF). El flujo anterior solo generaba el
@@ -309,6 +312,11 @@ fun SettingsScreen(
                 label = t("drive_mode"),
                 icon = Icons.Filled.DriveEta,
                 onClick = onOpenDriveMode
+            )
+            ActionRow(
+                label = t("pc_connect_title"),
+                icon = Icons.Filled.Computer,
+                onClick = { showPcLinkDialog = true }
             )
             ActionRow(
                 label = t("floating_player_perm_title"),
@@ -619,6 +627,7 @@ fun SettingsScreen(
                 confirmButton = { TextButton(onClick = { backupMessage = null }) { Text(t("ok")) } }
             )
         }
+        if (showPcLinkDialog) { PcLinkDialog(onDismiss = { showPcLinkDialog = false }) }
         if (showWipeDialog) {
             AlertDialog(
                 onDismissRequest = { showWipeDialog = false },

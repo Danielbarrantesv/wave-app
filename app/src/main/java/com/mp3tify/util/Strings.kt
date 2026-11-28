@@ -212,7 +212,17 @@ object Strings {
         "floating_player_perm_title" to "Mini reproductor flotante",
         "floating_player_perm_msg" to "Para dejar fijos los controles de retroceder, play/pausa y adelantar al salir de la app, permite 'Mostrar sobre otras apps'.",
         "allow" to "Permitir",
-        "download_from_drive" to "Descargar respaldo"
+        "download_from_drive" to "Descargar respaldo",
+        "pc_connect_title" to "Conectar con Wave PC",
+        "pc_connect_desc" to "Ingresa este código en Wave de escritorio (en la misma red Wi-Fi) para reproducir la música de tu celular en la PC.",
+        "pc_connect_code_label" to "CÓDIGO DE CONEXIÓN",
+        "pc_connect_new_code" to "Nuevo código",
+        "pc_connect_copied" to "Copiado",
+        "pc_connect_start" to "Activar conexión",
+        "pc_connect_stop" to "Detener",
+        "pc_connect_network" to "Red local",
+        "pc_connect_hint" to "Mantén Wave abierto en tu celular mientras escuchas en la PC.",
+        "copy" to "Copiar"
     )
 
     // ------------------------------------------------------------------
@@ -407,7 +417,17 @@ object Strings {
         "floating_player_perm_title" to "Floating mini player",
         "floating_player_perm_msg" to "To keep previous, play/pause and next controls fixed when leaving the app, allow 'Display over other apps'.",
         "allow" to "Allow",
-        "download_from_drive" to "Download backup"
+        "download_from_drive" to "Download backup",
+        "pc_connect_title" to "Connect to Wave PC",
+        "pc_connect_desc" to "Enter this code in Wave desktop (on the same Wi-Fi network) to play your phone's music on your PC.",
+        "pc_connect_code_label" to "PAIRING CODE",
+        "pc_connect_new_code" to "New code",
+        "pc_connect_copied" to "Copied",
+        "pc_connect_start" to "Start sharing",
+        "pc_connect_stop" to "Stop",
+        "pc_connect_network" to "Local network",
+        "pc_connect_hint" to "Keep Wave open on your phone while listening on your PC.",
+        "copy" to "Copy"
     )
 
     // ------------------------------------------------------------------
@@ -602,7 +622,17 @@ object Strings {
         "floating_player_perm_title" to "フローティングミニプレーヤー",
         "floating_player_perm_msg" to "アプリを離れたときに戻る・再生/一時停止・次の曲の操作を固定表示するには、「他のアプリの上に重ねて表示」を許可してください。",
         "allow" to "許可",
-        "download_from_drive" to "バックアップをダウンロード"
+        "download_from_drive" to "バックアップをダウンロード",
+        "pc_connect_title" to "Wave PCに接続",
+        "pc_connect_desc" to "同じWi-Fi内のPC版Waveでこのコードを入力すると、スマホの音楽をPCで再生できます。",
+        "pc_connect_code_label" to "接続コード",
+        "pc_connect_new_code" to "新しいコード",
+        "pc_connect_copied" to "コピー済み",
+        "pc_connect_start" to "接続を開始",
+        "pc_connect_stop" to "停止",
+        "pc_connect_network" to "ローカルネットワーク",
+        "pc_connect_hint" to "PCで再生中はスマホのWaveを開いたままにしてください。",
+        "copy" to "コピー"
     )
 
     // ------------------------------------------------------------------
@@ -797,7 +827,17 @@ object Strings {
         "floating_player_perm_title" to "Schwebender Mini-Player",
         "floating_player_perm_msg" to "Um Zurück, Play/Pause und Weiter beim Verlassen der App dauerhaft anzuzeigen, erlaube 'Über anderen Apps einblenden'.",
         "allow" to "Erlauben",
-        "download_from_drive" to "Backup herunterladen"
+        "download_from_drive" to "Backup herunterladen",
+        "pc_connect_title" to "Mit Wave PC verbinden",
+        "pc_connect_desc" to "Gib diesen Code in Wave Desktop (im selben WLAN) ein, um deine Musik auf dem PC abzuspielen.",
+        "pc_connect_code_label" to "VERBINDUNGSCODE",
+        "pc_connect_new_code" to "Neuer Code",
+        "pc_connect_copied" to "Kopiert",
+        "pc_connect_start" to "Verbindung starten",
+        "pc_connect_stop" to "Stoppen",
+        "pc_connect_network" to "Lokales Netzwerk",
+        "pc_connect_hint" to "Lass Wave auf dem Handy geöffnet, während du am PC hörst.",
+        "copy" to "Kopieren"
     )
 
     // ------------------------------------------------------------------
@@ -992,7 +1032,17 @@ object Strings {
         "floating_player_perm_title" to "Mini-lecteur flottant",
         "floating_player_perm_msg" to "Pour garder les contrôles précédent, lecture/pause et suivant fixes en quittant l'app, autorisez 'Afficher par-dessus d'autres apps'.",
         "allow" to "Autoriser",
-        "download_from_drive" to "Télécharger la sauvegarde"
+        "download_from_drive" to "Télécharger la sauvegarde",
+        "pc_connect_title" to "Connecter à Wave PC",
+        "pc_connect_desc" to "Entrez ce code dans Wave sur PC (sur le même Wi-Fi) pour écouter la musique du téléphone sur PC.",
+        "pc_connect_code_label" to "CODE DE CONNEXION",
+        "pc_connect_new_code" to "Nouveau code",
+        "pc_connect_copied" to "Copié",
+        "pc_connect_start" to "Activer la connexion",
+        "pc_connect_stop" to "Arrêter",
+        "pc_connect_network" to "Réseau local",
+        "pc_connect_hint" to "Gardez Wave ouvert sur votre téléphone pendant l'écoute sur PC.",
+        "copy" to "Copier"
     )
 
     // ------------------------------------------------------------------
@@ -1187,7 +1237,17 @@ object Strings {
         "floating_player_perm_title" to "플로팅 미니 플레이어",
         "floating_player_perm_msg" to "앱을 나갈 때 이전, 재생/일시정지, 다음 컨트롤을 고정 표시하려면 '다른 앱 위에 표시'를 허용하세요.",
         "allow" to "허용",
-        "download_from_drive" to "백업 다운로드"
+        "download_from_drive" to "백업 다운로드",
+        "pc_connect_title" to "Wave PC 연결",
+        "pc_connect_desc" to "같은 Wi-Fi의 PC용 Wave에 이 코드를 입력하면 휴대폰 음악을 PC에서 재생할 수 있습니다.",
+        "pc_connect_code_label" to "연결 코드",
+        "pc_connect_new_code" to "새 코드",
+        "pc_connect_copied" to "복사됨",
+        "pc_connect_start" to "연결 시작",
+        "pc_connect_stop" to "중지",
+        "pc_connect_network" to "로컬 네트워크",
+        "pc_connect_hint" to "PC에서 듣는 동안 휴대폰에서 Wave를 열어 두세요.",
+        "copy" to "복사"
     )
 
     private val all: Map<String, Map<String, String>> = mapOf(
