@@ -852,7 +852,14 @@ private fun PlaylistSongGridCard(
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        com.mp3tify.ui.components.AlbumArt(song = song, size = artSize)
+        Box {
+            com.mp3tify.ui.components.AlbumArt(song = song, size = artSize)
+            if (song.isFavorite) {
+                Box(Modifier.align(Alignment.TopEnd).padding(5.dp).size(24.dp).background(Color.Black.copy(alpha = 0.62f), androidx.compose.foundation.shape.CircleShape), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Filled.Favorite, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
+                }
+            }
+        }
         Spacer(Modifier.height(4.dp))
         Text(
             song.displayTitle,
