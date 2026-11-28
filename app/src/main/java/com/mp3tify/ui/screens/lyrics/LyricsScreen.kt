@@ -1,5 +1,8 @@
 package com.mp3tify.ui.screens.lyrics
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,6 +35,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -42,6 +46,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.mp3tify.lyrics.LrcLibClient
 import com.mp3tify.lyrics.LrcParser
@@ -75,7 +80,6 @@ fun LyricsScreen(onBack: () -> Unit) {
     var notAvailable by remember { mutableStateOf(false) }
     var parsed by remember { mutableStateOf<ParsedLyrics?>(null) }
 
-    val listState = rememberLazyListState()
 
     LaunchedEffect(current?.id) {
         // CRITICAL (v2.5.27): REVERTIDO el listState.scrollToItem(0) de v2.5.25.
@@ -137,15 +141,6 @@ fun LyricsScreen(onBack: () -> Unit) {
     val posState = PlaybackController.positionMs.collectAsState()
     val activeIndex by remember(lyrics) { androidx.compose.runtime.derivedStateOf { if (lyrics != null) LrcParser.activeLineIndex(lyrics, posState.value) else -1 } }
 
-    // Auto-scroll so the active line stays visible (activeIndex - 3).
-    LaunchedEffect(activeIndex) {
-        if (lyrics != null && activeIndex > 3) {
-            try {
-                listState.animateScrollToItem((activeIndex - 3).coerceAtLeast(0))
-            } catch (e: Exception) {
-            }
-        }
-    }
 
     // CRITICAL (v2.5.23 UI): modelo de imagen para el background.
     // Si el song tiene artUri, usarlo; si no, el background queda solo con
@@ -243,36 +238,29 @@ fun LyricsScreen(onBack: () -> Unit) {
                         }
                     }
                     lyrics != null -> {
-                        LazyColumn(
-                            state = listState,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            itemsIndexed(lyrics.lines) { i, line ->
-                                val active = i == activeIndex
-                                Text(
-                                    line.text.ifBlank { " " },
-                                    style = if (active) {
-                                        MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-                                    } else {
-                                        MaterialTheme.typography.bodyLarge
-                                    },
-                                    // CRITICAL (v2.5.23 UI): colores blancos para
-                                    // contraste con el fondo oscuro (portada + scrim).
-                                    // Línea activa: blanco sólido. Inactivas: gris claro.
-                                    color = if (active) {
-                                        Color.White
-                                    } else {
-                                        Color.White.copy(alpha = 0.5f)
-                                    },
-                                    textAlign = TextAlign.Center,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 10.dp)
-                                )
+                        key(current?.id) {
+                            val listState = rememberLazyListState()
+                            LaunchedEffect(activeIndex) {
+                                try { listState.animateScrollToItem(if (activeIndex <= 3) 0 else activeIndex - 3) } catch (_: Exception) {}
+                            }
+                            LazyColumn(
+                                state = listState,
+                                modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                itemsIndexed(lyrics.lines) { i, line ->
+                                    val active = i == activeIndex
+                                    val sizeSp by animateFloatAsState(if (active) 25f else 16f, animationSpec = tween(220), label = "lyrSz")
+                                    val lineColor by animateColorAsState(if (active) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.52f), animationSpec = tween(220), label = "lyrClr")
+                                    Text(
+                                        line.text.ifBlank { " " },
+                                        style = MaterialTheme.typography.bodyLarge.copy(fontSize = sizeSp.sp, lineHeight = (sizeSp * 1.32f).sp, fontWeight = if (active) FontWeight.ExtraBold else FontWeight.Normal),
+                                        color = lineColor,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)
+                                    )
+                                }
                             }
                         }
                     }
