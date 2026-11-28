@@ -7,8 +7,6 @@ import android.app.RemoteAction
 import android.content.BroadcastReceiver
 import android.content.Intent
 import android.content.IntentFilter
-import android.net.Uri
-import android.provider.Settings
 import android.util.Rational
 import android.content.Context
 import android.content.pm.PackageManager
@@ -60,7 +58,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.mp3tify.data.repository.Repository
@@ -72,7 +69,6 @@ import com.mp3tify.data.model.displayArtist
 import com.mp3tify.data.model.displayTitle
 import com.mp3tify.ui.AppNav
 import com.mp3tify.ui.components.AlbumArt
-import com.mp3tify.ui.components.FloatingMiniPlayer
 import com.mp3tify.ui.ProvideAppLanguage
 import com.mp3tify.ui.t
 import com.mp3tify.ui.theme.AccentColor
@@ -169,11 +165,6 @@ class MainActivity : ComponentActivity() {
             var showLanguageDialog by remember { mutableStateOf(false) }
             var showRecoveryDialog by remember { mutableStateOf(false) }
             var languageDone by remember { mutableStateOf(languageSelectionDone) }
-            var recoveryDone by remember { mutableStateOf(recoveryCheckDone) }
-            var showOverlayDialog by remember { mutableStateOf(false) }
-            val overlayPromptDone = metaPrefs.getBoolean("overlay_prompt_done", false)
-            LaunchedEffect(darkTheme, accentKey) { val a = AccentColor.fromKey(accentKey); FloatingMiniPlayer.setTheme(darkTheme, (if (darkTheme) a.dark else a.light).toArgb()) }
-            LaunchedEffect(languageDone, recoveryDone, showLanguageDialog, showRecoveryDialog) { if (languageDone && recoveryDone && !showLanguageDialog && !showRecoveryDialog && !overlayPromptDone && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this@MainActivity)) showOverlayDialog = true }
 
             // CRITICAL FIX: mostrar diálogo de idioma PRIMERO en la primera instalación.
             LaunchedEffect(Unit) {
@@ -188,7 +179,6 @@ class MainActivity : ComponentActivity() {
                         e.printStackTrace()
                         metaPrefs.edit().putBoolean("recovery_check_done", true).apply()
                     }
-                    recoveryDone = true
                 }
             }
 
@@ -204,7 +194,6 @@ class MainActivity : ComponentActivity() {
                         e.printStackTrace()
                         metaPrefs.edit().putBoolean("recovery_check_done", true).apply()
                     }
-                    recoveryDone = true
                 }
             }
 
@@ -214,22 +203,13 @@ class MainActivity : ComponentActivity() {
                     val sideInsets = if (isLandscape) WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal).union(WindowInsets(left = 12.dp, right = 12.dp)) else WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
                     ProvideAppLanguage {
                         Box(Modifier.fillMaxSize()) {
-                            if (showOverlayDialog) {
-                                AlertDialog(
-                                    onDismissRequest = { showOverlayDialog = false; metaPrefs.edit().putBoolean("overlay_prompt_done", true).apply() },
-                                    title = { Text(t("floating_player_perm_title")) },
-                                    text = { Text(t("floating_player_perm_msg")) },
-                                    confirmButton = { TextButton(onClick = { showOverlayDialog = false; metaPrefs.edit().putBoolean("overlay_prompt_done", true).apply(); try { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))) } catch (_: Exception) {} }) { Text(t("allow")) } },
-                                    dismissButton = { TextButton(onClick = { showOverlayDialog = false; metaPrefs.edit().putBoolean("overlay_prompt_done", true).apply() }) { Text(t("cancel")) } }
-                                )
-                            }
                             Box(Modifier.fillMaxSize().windowInsetsPadding(sideInsets)) { AppNav() }
                             if (isInPip) {
                                 val meta by PlaybackController.barMeta.collectAsState()
                                 val song = meta.currentSong
-                                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(horizontal = 10.dp, vertical = 8.dp), contentAlignment = Alignment.TopCenter) {
+                                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(horizontal = 10.dp, vertical = 6.dp), contentAlignment = Alignment.TopCenter) {
                                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                        AlbumArt(song = song, size = 48.dp, modifier = Modifier.clip(RoundedCornerShape(8.dp)))
+                                        AlbumArt(song = song, size = 44.dp, modifier = Modifier.clip(RoundedCornerShape(8.dp)))
                                         Column(Modifier.weight(1f)) {
                                             Text(song?.displayTitle ?: t("app_name"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                             Text(song?.displayArtist ?: "", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -280,14 +260,13 @@ class MainActivity : ComponentActivity() {
                         onDismissRequest = { showRecoveryDialog = false; metaPrefs.edit().putBoolean("recovery_check_done", true).apply() },
                         title = { Text(t("recovery_title")) },
                         text = { Text(t("recovery_message")) },
-                        confirmButton = { TextButton(onClick = { showRecoveryDialog = false; metaPrefs.edit().putBoolean("recovery_check_done", true).apply(); recoveryDone = true }) { Text(t("recovery_keep")) } },
+                        confirmButton = { TextButton(onClick = { showRecoveryDialog = false; metaPrefs.edit().putBoolean("recovery_check_done", true).apply() }) { Text(t("recovery_keep")) } },
                         dismissButton = {
                             TextButton(onClick = {
                                 showRecoveryDialog = false
                                 lifecycleScope.launch {
                                     try { withContext(Dispatchers.IO) { Repository.get(applicationContext).wipeAllUserData() } } catch (e: Exception) { e.printStackTrace() }
                                     metaPrefs.edit().putBoolean("recovery_check_done", true).apply()
-                                    recoveryDone = true
                                 }
                             }) { Text(t("recovery_wipe")) }
                         }
@@ -302,17 +281,14 @@ class MainActivity : ComponentActivity() {
     private fun pipAction(action: String, reqCode: Int, iconRes: Int, title: String) = RemoteAction(android.graphics.drawable.Icon.createWithResource(this, iconRes), title, title, PendingIntent.getBroadcast(this, reqCode, Intent(action).setPackage(packageName), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
     @androidx.annotation.RequiresApi(Build.VERSION_CODES.O)
     private fun buildPipParams(isPlaying: Boolean, hasSong: Boolean): PictureInPictureParams {
-        val b = PictureInPictureParams.Builder().setAspectRatio(Rational(16, 9)).setActions(listOf(pipAction(ACTION_PIP_PREV, 101, R.drawable.ic_pip_prev, "Previous"), pipAction(ACTION_PIP_PLAY_PAUSE, 102, if (isPlaying) R.drawable.ic_pip_pause else R.drawable.ic_pip_play, if (isPlaying) "Pause" else "Play"), pipAction(ACTION_PIP_NEXT, 103, R.drawable.ic_pip_next, "Next")))
-        val canOverlay = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && Settings.canDrawOverlays(this)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) b.setAutoEnterEnabled(!canOverlay && isPlaying && hasSong)
+        val b = PictureInPictureParams.Builder().setAspectRatio(Rational(21, 9)).setActions(listOf(pipAction(ACTION_PIP_PREV, 101, R.drawable.ic_pip_prev, "Previous"), pipAction(ACTION_PIP_PLAY_PAUSE, 102, if (isPlaying) R.drawable.ic_pip_pause else R.drawable.ic_pip_play, if (isPlaying) "Pause" else "Play"), pipAction(ACTION_PIP_NEXT, 103, R.drawable.ic_pip_next, "Next")))
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) b.setAutoEnterEnabled(isPlaying && hasSong)
         return b.build()
     }
-    override fun onUserLeaveHint() { super.onUserLeaveHint(); val m = PlaybackController.barMeta.value; if (m.isPlaying && m.currentSong != null) { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && Settings.canDrawOverlays(this)) FloatingMiniPlayer.show(applicationContext) else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !isInPictureInPictureMode) try { enterPictureInPictureMode(buildPipParams(true, true)) } catch (_: Exception) {} } }
+    override fun onUserLeaveHint() { super.onUserLeaveHint(); if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !isInPictureInPictureMode) { val m = PlaybackController.barMeta.value; if (m.isPlaying && m.currentSong != null) try { enterPictureInPictureMode(buildPipParams(true, true)) } catch (_: Exception) {} } }
     override fun onDestroy() { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) try { unregisterReceiver(pipReceiver) } catch (_: Exception) {}; super.onDestroy() }
     override fun onResume() {
         super.onResume()
-        FloatingMiniPlayer.hide()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) { val m = PlaybackController.barMeta.value; try { setPictureInPictureParams(buildPipParams(m.isPlaying, m.currentSong != null)) } catch (_: Exception) {} }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) isInPip = isInPictureInPictureMode
         SleepTimerManager.attachActivity(this)
         WakeLockManager.refreshDeviceAdminStatus(this)
