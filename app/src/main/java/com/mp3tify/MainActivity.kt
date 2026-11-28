@@ -7,6 +7,7 @@ import android.app.RemoteAction
 import android.content.BroadcastReceiver
 import android.content.Intent
 import android.content.IntentFilter
+import android.provider.Settings
 import android.util.Rational
 import android.content.Context
 import android.content.pm.PackageManager
@@ -58,6 +59,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.mp3tify.data.repository.Repository
@@ -69,6 +71,7 @@ import com.mp3tify.data.model.displayArtist
 import com.mp3tify.data.model.displayTitle
 import com.mp3tify.ui.AppNav
 import com.mp3tify.ui.components.AlbumArt
+import com.mp3tify.ui.components.FloatingMiniPlayer
 import com.mp3tify.ui.ProvideAppLanguage
 import com.mp3tify.ui.t
 import com.mp3tify.ui.theme.AccentColor
@@ -165,6 +168,7 @@ class MainActivity : ComponentActivity() {
             var showLanguageDialog by remember { mutableStateOf(false) }
             var showRecoveryDialog by remember { mutableStateOf(false) }
             var languageDone by remember { mutableStateOf(languageSelectionDone) }
+            LaunchedEffect(darkTheme, accentKey) { val a = AccentColor.fromKey(accentKey); FloatingMiniPlayer.setTheme(darkTheme, (if (darkTheme) a.dark else a.light).toArgb()) }
 
             // CRITICAL FIX: mostrar diálogo de idioma PRIMERO en la primera instalación.
             LaunchedEffect(Unit) {
@@ -282,13 +286,16 @@ class MainActivity : ComponentActivity() {
     @androidx.annotation.RequiresApi(Build.VERSION_CODES.O)
     private fun buildPipParams(isPlaying: Boolean, hasSong: Boolean): PictureInPictureParams {
         val b = PictureInPictureParams.Builder().setAspectRatio(Rational(21, 9)).setActions(listOf(pipAction(ACTION_PIP_PREV, 101, R.drawable.ic_pip_prev, "Previous"), pipAction(ACTION_PIP_PLAY_PAUSE, 102, if (isPlaying) R.drawable.ic_pip_pause else R.drawable.ic_pip_play, if (isPlaying) "Pause" else "Play"), pipAction(ACTION_PIP_NEXT, 103, R.drawable.ic_pip_next, "Next")))
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) b.setAutoEnterEnabled(isPlaying && hasSong)
+        val canOverlay = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && Settings.canDrawOverlays(this)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) b.setAutoEnterEnabled(!canOverlay && isPlaying && hasSong)
         return b.build()
     }
-    override fun onUserLeaveHint() { super.onUserLeaveHint(); if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !isInPictureInPictureMode) { val m = PlaybackController.barMeta.value; if (m.isPlaying && m.currentSong != null) try { enterPictureInPictureMode(buildPipParams(true, true)) } catch (_: Exception) {} } }
+    override fun onUserLeaveHint() { super.onUserLeaveHint(); val m = PlaybackController.barMeta.value; if (m.isPlaying && m.currentSong != null) { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && Settings.canDrawOverlays(this)) FloatingMiniPlayer.show(applicationContext) else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !isInPictureInPictureMode) try { enterPictureInPictureMode(buildPipParams(true, true)) } catch (_: Exception) {} } }
     override fun onDestroy() { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) try { unregisterReceiver(pipReceiver) } catch (_: Exception) {}; super.onDestroy() }
     override fun onResume() {
         super.onResume()
+        FloatingMiniPlayer.hide()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) { val m = PlaybackController.barMeta.value; try { setPictureInPictureParams(buildPipParams(m.isPlaying, m.currentSong != null)) } catch (_: Exception) {} }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) isInPip = isInPictureInPictureMode
         SleepTimerManager.attachActivity(this)
         WakeLockManager.refreshDeviceAdminStatus(this)

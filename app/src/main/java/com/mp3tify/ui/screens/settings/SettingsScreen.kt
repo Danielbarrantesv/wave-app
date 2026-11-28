@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material.icons.filled.BugReport
@@ -308,6 +309,14 @@ fun SettingsScreen(
                 label = t("drive_mode"),
                 icon = Icons.Filled.DriveEta,
                 onClick = onOpenDriveMode
+            )
+            ActionRow(
+                label = t("floating_player_perm_title"),
+                icon = Icons.Filled.PictureInPictureAlt,
+                onClick = {
+                    val intent = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION, android.net.Uri.parse("package:${context.packageName}")) else Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:${context.packageName}"))
+                    try { context.startActivity(intent) } catch (_: Exception) {}
+                }
             )
 
             // ---------------- Apariencia ----------------
