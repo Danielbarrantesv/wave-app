@@ -21,8 +21,22 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.drag
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import kotlinx.coroutines.Job
+import kotlin.math.roundToInt
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Icon
@@ -85,20 +99,37 @@ fun AutoHideCountToolbar(scrollState: LazyListState, count: Int, isGrid: Boolean
 @Composable
 fun ScrollJumpButtons(scrollState: LazyListState, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
-    val showUp by remember(scrollState) { derivedStateOf { scrollState.canScrollBackward } }
-    val showDown by remember(scrollState) { derivedStateOf { scrollState.canScrollForward } }
-    AnimatedVisibility(visible = showUp || showDown, enter = fadeIn(), exit = fadeOut(), modifier = modifier) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (showUp) {
-                Surface(onClick = { scope.launch { if (scrollState.firstVisibleItemIndex > 15) scrollState.scrollToItem(15); scrollState.animateScrollToItem(0) } }, shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f), shadowElevation = 4.dp, modifier = Modifier.size(40.dp)) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Icon(Icons.Filled.KeyboardArrowUp, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
+    val density = LocalDensity.current
+    val isScrollable by remember(scrollState) { derivedStateOf { scrollState.canScrollBackward || scrollState.canScrollForward } }
+    AnimatedVisibility(visible = isScrollable, enter = fadeIn(), exit = fadeOut(), modifier = modifier.fillMaxHeight()) {
+        var trackHeightPx by remember { mutableFloatStateOf(0f) }
+        var isDragging by remember { mutableStateOf(false) }
+        var dragFraction by remember { mutableFloatStateOf(0f) }
+        val totalItems by remember(scrollState) { derivedStateOf { scrollState.layoutInfo.totalItemsCount } }
+        val visibleCount by remember(scrollState) { derivedStateOf { scrollState.layoutInfo.visibleItemsInfo.size.coerceAtLeast(1) } }
+        val listFraction by remember(scrollState) { derivedStateOf { if (!scrollState.canScrollForward && scrollState.canScrollBackward) 1f else (scrollState.firstVisibleItemIndex.toFloat() / (totalItems - visibleCount).coerceAtLeast(1).toFloat()).coerceIn(0f, 1f) } }
+        val fraction = if (isDragging) dragFraction else listFraction
+        val thumbHeightPx = with(density) { val raw = if (totalItems > 0) trackHeightPx * (visibleCount.toFloat() / totalItems.toFloat()) else 48.dp.toPx(); raw.coerceIn(40.dp.toPx(), 88.dp.toPx()).coerceAtMost((trackHeightPx * 0.6f).coerceAtLeast(40.dp.toPx())) }
+        val thumbOffsetY = (fraction * (trackHeightPx - thumbHeightPx).coerceAtLeast(1f)).roundToInt()
+        val thumbWidth by animateDpAsState(if (isDragging) 9.dp else 5.dp, label = "sbW")
+        val thumbAlpha by animateFloatAsState(if (isDragging || scrollState.isScrollInProgress) 0.95f else 0.55f, label = "sbA")
+        Box(Modifier.fillMaxHeight().width(24.dp).onSizeChanged { trackHeightPx = it.height.toFloat() }.pointerInput(scrollState, trackHeightPx, thumbHeightPx) {
+            var job: Job? = null
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                isDragging = true
+                fun jumpTo(y: Float) {
+                    val f = ((y - thumbHeightPx / 2f) / (trackHeightPx - thumbHeightPx).coerceAtLeast(1f)).coerceIn(0f, 1f)
+                    dragFraction = f
+                    val tot = scrollState.layoutInfo.totalItemsCount; val vis = scrollState.layoutInfo.visibleItemsInfo.size.coerceAtLeast(1)
+                    val target = if (f >= 0.995f) (tot - 1).coerceAtLeast(0) else (f * (tot - vis).coerceAtLeast(0)).roundToInt().coerceIn(0, (tot - 1).coerceAtLeast(0))
+                    job?.cancel(); job = scope.launch { scrollState.scrollToItem(target) }
                 }
+                try { jumpTo(down.position.y); drag(down.id) { c -> c.consume(); jumpTo(c.position.y) } } finally { isDragging = false }
             }
-            if (showDown) {
-                Surface(onClick = { scope.launch { val last = (scrollState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0); if (last - scrollState.firstVisibleItemIndex > 15) scrollState.scrollToItem((last - 15).coerceAtLeast(0)); scrollState.animateScrollToItem(last) } }, shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f), shadowElevation = 4.dp, modifier = Modifier.size(40.dp)) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
-                }
-            }
+        }, contentAlignment = Alignment.TopEnd) {
+            Box(Modifier.padding(end = 3.dp).fillMaxHeight().width(3.dp).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f), CircleShape))
+            if (trackHeightPx > 0f) Box(Modifier.offset { IntOffset(0, thumbOffsetY) }.padding(end = 2.dp).width(thumbWidth).height(with(density) { thumbHeightPx.toDp() }).background(MaterialTheme.colorScheme.primary.copy(alpha = thumbAlpha), CircleShape))
         }
     }
 }

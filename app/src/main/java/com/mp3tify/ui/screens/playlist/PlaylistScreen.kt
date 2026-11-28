@@ -466,7 +466,7 @@ fun PlaylistScreen(
                 }
                 }
                 AutoHideCountToolbar(scrollState = scrollState, count = songs.size, isGrid = isGridView, onToggleView = { scope.launch { Preferences.setPlaylistViewMode(if (!isGridView) "GRID" else "LIST") } }, sleepTimerActive = sleepTimerMinutes > 0, onOpenSleepTimer = { showSleepTimerDialog = true })
-                ScrollJumpButtons(scrollState = scrollState, modifier = Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 12.dp))
+                ScrollJumpButtons(scrollState = scrollState, modifier = Modifier.align(Alignment.CenterEnd).padding(top = 52.dp, bottom = 96.dp, end = 2.dp))
                 }
             }
         }

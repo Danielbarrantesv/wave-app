@@ -173,7 +173,7 @@ fun SearchScreen(
                         )
                     }
                 }
-                ScrollJumpButtons(scrollState = listState, modifier = Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 12.dp))
+                ScrollJumpButtons(scrollState = listState, modifier = Modifier.align(Alignment.CenterEnd).padding(top = 8.dp, bottom = 16.dp, end = 2.dp))
                 }
             }
         }
