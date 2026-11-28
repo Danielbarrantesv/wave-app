@@ -209,6 +209,9 @@ object Strings {
         "drive_mode" to "Modo auto",
         "cloud_backup" to "Respaldo en la nube",
         "upload_to_drive" to "Subir respaldo",
+        "floating_player_perm_title" to "Mini reproductor flotante",
+        "floating_player_perm_msg" to "Para dejar fijos los controles de retroceder, play/pausa y adelantar al salir de la app, permite 'Mostrar sobre otras apps'.",
+        "allow" to "Permitir",
         "download_from_drive" to "Descargar respaldo"
     )
 
@@ -401,6 +404,9 @@ object Strings {
         "drive_mode" to "Drive mode",
         "cloud_backup" to "Cloud backup",
         "upload_to_drive" to "Upload backup",
+        "floating_player_perm_title" to "Floating mini player",
+        "floating_player_perm_msg" to "To keep previous, play/pause and next controls fixed when leaving the app, allow 'Display over other apps'.",
+        "allow" to "Allow",
         "download_from_drive" to "Download backup"
     )
 
@@ -593,6 +599,9 @@ object Strings {
         "drive_mode" to "ドライブモード",
         "cloud_backup" to "クラウドバックアップ",
         "upload_to_drive" to "バックアップをアップロード",
+        "floating_player_perm_title" to "フローティングミニプレーヤー",
+        "floating_player_perm_msg" to "アプリを離れたときに戻る・再生/一時停止・次の曲の操作を固定表示するには、「他のアプリの上に重ねて表示」を許可してください。",
+        "allow" to "許可",
         "download_from_drive" to "バックアップをダウンロード"
     )
 
@@ -785,6 +794,9 @@ object Strings {
         "drive_mode" to "Auto-Modus",
         "cloud_backup" to "Cloud-Backup",
         "upload_to_drive" to "Backup hochladen",
+        "floating_player_perm_title" to "Schwebender Mini-Player",
+        "floating_player_perm_msg" to "Um Zurück, Play/Pause und Weiter beim Verlassen der App dauerhaft anzuzeigen, erlaube 'Über anderen Apps einblenden'.",
+        "allow" to "Erlauben",
         "download_from_drive" to "Backup herunterladen"
     )
 
@@ -977,6 +989,9 @@ object Strings {
         "drive_mode" to "Mode voiture",
         "cloud_backup" to "Sauvegarde cloud",
         "upload_to_drive" to "Téléverser la sauvegarde",
+        "floating_player_perm_title" to "Mini-lecteur flottant",
+        "floating_player_perm_msg" to "Pour garder les contrôles précédent, lecture/pause et suivant fixes en quittant l'app, autorisez 'Afficher par-dessus d'autres apps'.",
+        "allow" to "Autoriser",
         "download_from_drive" to "Télécharger la sauvegarde"
     )
 
@@ -1169,6 +1184,9 @@ object Strings {
         "drive_mode" to "운전 모드",
         "cloud_backup" to "클라우드 백업",
         "upload_to_drive" to "백업 업로드",
+        "floating_player_perm_title" to "플로팅 미니 플레이어",
+        "floating_player_perm_msg" to "앱을 나갈 때 이전, 재생/일시정지, 다음 컨트롤을 고정 표시하려면 '다른 앱 위에 표시'를 허용하세요.",
+        "allow" to "허용",
         "download_from_drive" to "백업 다운로드"
     )
 
